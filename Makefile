@@ -6,6 +6,8 @@ CONFDIR=/etc/iproute2
 DOCDIR=/share/doc/iproute2
 MANDIR=/share/man
 ARPDDIR=/var/lib/arpd
+KERNEL_INCLUDE = /usr/src/net-next/include
+DEBUG = y
 
 # Path to db_185.h include
 DBM_INCLUDE:=$(ROOTDIR)/usr/include
@@ -29,11 +31,16 @@ ADDLIB+=ipx_ntop.o ipx_pton.o
 
 CC = gcc
 HOSTCC = gcc
-CCOPTS = -D_GNU_SOURCE -O2 -Wstrict-prototypes -Wall
+CCOPTS = -D_GNU_SOURCE -Wstrict-prototypes -Wall
+ifeq ($(DEBUG),y)
+CCOPTS+=-g -O0
+else
+CCOPTS+=-O2
+endif
 CFLAGS = $(CCOPTS) -I../include $(DEFINES)
 YACCFLAGS = -d -t -v
 
-SUBDIRS=lib ip tc misc netem genl
+SUBDIRS=lib ip tc misc netem genl mpls
 
 LIBNETLINK=../lib/libnetlink.a ../lib/libutil.a
 LDLIBS += $(LIBNETLINK)

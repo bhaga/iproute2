@@ -102,6 +102,7 @@ __PF(IEEE80211_RADIOTAP,ieee802.11/radiotap)
 __PF(IEEE802154, ieee802.15.4)
 __PF(PHONET, phonet)
 __PF(PHONET_PIPE, phonet_pipe)
+__PF(MPLS_TUNNEL,mpls_tunnel)
 __PF(CAIF, caif)
 
 __PF(NONE, none)
