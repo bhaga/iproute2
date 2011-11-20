@@ -101,7 +101,7 @@ static void usage(void) __attribute__((noreturn));
 
 static void usage(void)
 {
-	fprintf(stderr, "Usage: genl [ OPTIONS ] OBJECT | help }\n"
+	fprintf(stderr, "Usage: genl {[ OPTIONS ] OBJECT | -help }\n"
 	                "where  OBJECT := { ctrl etc }\n"
 	                "       OPTIONS := { -s[tatistics] | -d[etails] | -r[aw] }\n");
 	exit(-1);
@@ -112,17 +112,19 @@ int main(int argc, char **argv)
 	while (argc > 1) {
 		if (argv[1][0] != '-')
 			break;
-		if (matches(argv[1], "-stats") == 0 ||
+		if (matches(argv[1], "-s") == 0 ||
+			matches(argv[1], "-stats") == 0 ||
 		    matches(argv[1], "-statistics") == 0) {
 			++show_stats;
-		} else if (matches(argv[1], "-details") == 0) {
+		} else if (matches(argv[1], "-d") == 0 ||
+					matches(argv[1], "-details") == 0) {
 			++show_details;
-		} else if (matches(argv[1], "-raw") == 0) {
+		} else if (matches(argv[1], "-r") == 0 || matches(argv[1], "-raw") == 0) {
 			++show_raw;
 		} else if (matches(argv[1], "-Version") == 0) {
 			printf("genl utility, iproute2-ss%s\n", SNAPSHOT);
 			exit(0);
-		} else if (matches(argv[1], "-help") == 0) {
+		} else if (matches(argv[1], "-h") == 0 || matches(argv[1], "-help") == 0) {
 			usage();
 		} else {
 			fprintf(stderr, "Option \"%s\" is unknown, try "

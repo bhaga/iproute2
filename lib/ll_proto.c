@@ -76,6 +76,7 @@ __PF(MOBITEX,mobitex)
 __PF(CONTROL,control)
 __PF(IRDA,irda)
 __PF(ECONET,econet)
+__PF(MPLS_UC,mpls)
 __PF(TIPC,tipc)
 __PF(AOE,aoe)
 

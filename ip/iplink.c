@@ -227,7 +227,7 @@ int iplink_parse_vf(int vf, int *argcp, char ***argvp,
 			}
 			ivt.vf = vf;
 			addattr_l(&req->n, sizeof(*req), IFLA_VF_TX_RATE, &ivt, sizeof(ivt));
-		
+
 		} else {
 			/* rewind arg */
 			PREV_ARG();
@@ -301,16 +301,16 @@ int iplink_parse(int argc, char **argv, struct iplink_req *req,
 			if (get_integer(&mtu, *argv, 0))
 				invarg("Invalid \"mtu\" value\n", *argv);
 			addattr_l(&req->n, sizeof(*req), IFLA_MTU, &mtu, 4);
-                } else if (strcmp(*argv, "netns") == 0) {
-                        NEXT_ARG();
-                        if (netns != -1)
-                                duparg("netns", *argv);
+		} else if (strcmp(*argv, "netns") == 0) {
+			NEXT_ARG();
+			if (netns != -1)
+				duparg("netns", *argv);
 			if ((netns = get_netns_fd(*argv)) >= 0)
 				addattr_l(&req->n, sizeof(*req), IFLA_NET_NS_FD, &netns, 4);
 			else if (get_integer(&netns, *argv, 0) == 0)
 				addattr_l(&req->n, sizeof(*req), IFLA_NET_NS_PID, &netns, 4);
 			else
-                                invarg("Invalid \"netns\" value\n", *argv);
+				invarg("Invalid \"netns\" value\n", *argv);
 		} else if (strcmp(*argv, "multicast") == 0) {
 			NEXT_ARG();
 			req->i.ifi_change |= IFF_MULTICAST;
@@ -356,6 +356,15 @@ int iplink_parse(int argc, char **argv, struct iplink_req *req,
 				req->i.ifi_flags |= IFF_NOARP;
 			} else
 				return on_off("noarp");
+		} else if (strcmp(*argv, "mpls") == 0) {
+			NEXT_ARG();
+			req->i.ifi_change |= IFF_MPLS;
+			if (strcmp(*argv, "on") == 0) {
+				req->i.ifi_flags |= IFF_MPLS;
+			} else if (strcmp(*argv, "off") == 0) {
+				req->i.ifi_flags &= ~IFF_MPLS;
+			} else
+				return on_off("nompls");
 		} else if (strcmp(*argv, "vf") == 0) {
 			struct rtattr *vflist;
 			NEXT_ARG();
@@ -475,36 +484,6 @@ static int iplink_modify(int cmd, unsigned int flags, int argc, char **argv)
 
 	ll_init_map(&rth);
 
-	if (type) {
-		struct rtattr *linkinfo = NLMSG_TAIL(&req.n);
-		addattr_l(&req.n, sizeof(req), IFLA_LINKINFO, NULL, 0);
-		addattr_l(&req.n, sizeof(req), IFLA_INFO_KIND, type,
-			 strlen(type));
-
-		lu = get_link_kind(type);
-		if (lu && argc) {
-			struct rtattr * data = NLMSG_TAIL(&req.n);
-			addattr_l(&req.n, sizeof(req), IFLA_INFO_DATA, NULL, 0);
-
-			if (lu->parse_opt &&
-			    lu->parse_opt(lu, argc, argv, &req.n))
-				return -1;
-
-			data->rta_len = (void *)NLMSG_TAIL(&req.n) - (void *)data;
-		} else if (argc) {
-			if (matches(*argv, "help") == 0)
-				usage();
-			fprintf(stderr, "Garbage instead of arguments \"%s ...\". "
-					"Try \"ip link help\".\n", *argv);
-			return -1;
-		}
-		linkinfo->rta_len = (void *)NLMSG_TAIL(&req.n) - (void *)linkinfo;
-	} else if (flags & NLM_F_CREATE) {
-		fprintf(stderr, "Not enough information: \"type\" argument "
-				"is required\n");
-		return -1;
-	}
-
 	if (!(flags & NLM_F_CREATE)) {
 		if (!dev) {
 			fprintf(stderr, "Not enough information: \"dev\" "
@@ -542,6 +521,36 @@ static int iplink_modify(int cmd, unsigned int flags, int argc, char **argv)
 		if (len > IFNAMSIZ)
 			invarg("\"name\" too long\n", name);
 		addattr_l(&req.n, sizeof(req), IFLA_IFNAME, name, len);
+	}
+
+	if (type) {
+		struct rtattr *linkinfo = NLMSG_TAIL(&req.n);
+		addattr_l(&req.n, sizeof(req), IFLA_LINKINFO, NULL, 0);
+		addattr_l(&req.n, sizeof(req), IFLA_INFO_KIND, type,
+			 strlen(type));
+
+		lu = get_link_kind(type);
+		if (lu && argc) {
+			struct rtattr * data = NLMSG_TAIL(&req.n);
+			addattr_l(&req.n, sizeof(req), IFLA_INFO_DATA, NULL, 0);
+
+			if (lu->parse_opt &&
+			    lu->parse_opt(lu, argc, argv, &req.n))
+				return -1;
+
+			data->rta_len = (void *)NLMSG_TAIL(&req.n) - (void *)data;
+		} else if (argc) {
+			if (matches(*argv, "help") == 0)
+				usage();
+			fprintf(stderr, "Garbage instead of arguments \"%s ...\". "
+					"Try \"ip link help\".\n", *argv);
+			return -1;
+		}
+		linkinfo->rta_len = (void *)NLMSG_TAIL(&req.n) - (void *)linkinfo;
+	} else if (flags & NLM_F_CREATE) {
+		fprintf(stderr, "Not enough information: \"type\" argument "
+				"is required\n");
+		return -1;
 	}
 
 	if (rtnl_talk(&rth, &req.n, 0, 0, NULL, NULL, NULL) < 0)
@@ -829,6 +838,15 @@ static int do_set(int argc, char **argv)
 				flags |= IFF_NOARP;
 			} else
 				return on_off("noarp");
+		} else if (strcmp(*argv, "mpls") == 0) {
+			NEXT_ARG();
+			mask |= IFF_MPLS;
+			if (strcmp(*argv, "on") == 0) {
+				flags |= IFF_MPLS;
+			} else if (strcmp(*argv, "off") == 0) {
+				flags &= ~IFF_MPLS;
+			} else
+				return on_off("nompls");
 		} else if (matches(*argv, "dynamic") == 0) {
 			NEXT_ARG();
 			mask |= IFF_DYNAMIC;
