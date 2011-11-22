@@ -9,7 +9,6 @@
  *          Igor Maravić	 <igorm@etf.rs> - Innovation Center, School of Electrical Engineering in Belgrade
  *   (c) 1999-2004   James Leu        <jleu@mindspring.com>
  *   (c) 2003-2004   Ramon Casellas   <casellas@infres.enst.fr>
- *   (c) 2011        Igor Maravić	  <igorm@etf.rs>
  *
  * include/linux/mpls.h
  *      Data types and structs used by userspace programs to access MPLS
@@ -32,7 +31,7 @@
 *MPLS DEBUGGING
 **/
 
-#define MPLS_LINUX_VERSION	0x01090806
+#define MPLS_LINUX_VERSION	0x01090900
 
 /*based on netlink_group_mask from net/netlink/af_netlink.c */
 #define _group_mask(group_id) group_id ? 1 << (group_id - 1) : 0
@@ -59,7 +58,6 @@
 #define MPLS_CHANGE_MTU		0x01
 #define MPLS_CHANGE_PROP_TTL	0x02
 #define MPLS_CHANGE_INSTR	0x04
-#define MPLS_CHANGE_PROTO	0x10
 
 enum mpls_dir {
 	MPLS_IN = 0x10,
@@ -115,7 +113,6 @@ struct mpls_label {
 };
 
 struct mpls_in_label_req {
-	unsigned int      mil_proto;
 	struct mpls_label mil_label;
 	unsigned char     mil_change_flag;
 	unsigned char     mil_owner;   /* Routing protocol */

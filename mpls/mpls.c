@@ -63,7 +63,7 @@ int mpls_list(int cmd,int argc, char **argv);
 
 static void usage(void)
 {
-	fprintf(stderr, "Usage: mpls ilm CMD label LABEL labelspace NUMBER [[proto PROTO] | [instructions INSTR]]\n");
+	fprintf(stderr, "Usage: mpls ilm CMD label LABEL labelspace NUMBER [instructions INSTR]\n");
 	fprintf(stderr, "       mpls nhlfe CMD key KEY [[mtu MTU] | [propagate_ttl | no_propagate_ttl] | [instructions INSTR]]\n");
 	fprintf(stderr, "       mpls xc CMD ilm_label LABEL ilm_labelspace NUMBER nhlfe_key KEY\n");
 	fprintf(stderr, "       mpls labelspace set dev NAME labelspace NUMBER\n");
@@ -89,7 +89,6 @@ static void usage(void)
 	fprintf(stderr, "LABEL  := TYPE VALUE\n");
 	fprintf(stderr, "KEY    := any unsigned int, except 0\n");
 	fprintf(stderr, "NAME   := network device name (i.e. eth0)\n");
-	fprintf(stderr, "PROTO  := ipv4 | ipv6\n");
 	fprintf(stderr, "ADDR   := ipv6 or ipv4 address\n");
 	fprintf(stderr, "NH     := nexthop NAME [none|packet|ADDR]\n");
 	fprintf(stderr, "FWD    := forward KEY\n");
@@ -756,8 +755,6 @@ mpls_ilm_modify(int cmd, unsigned flags, int argc, char **argv)
 	ghdr = NLMSG_DATA(&req.n);
 	ghdr->cmd = cmd;
 
-	mil.mil_proto = AF_INET;
-
 	while (argc > 0) {
 		if (strcmp(*argv, "labelspace") == 0) {
 			__u32 ls;
@@ -768,18 +765,6 @@ mpls_ilm_modify(int cmd, unsigned flags, int argc, char **argv)
 		} else if (strcmp(*argv, "label") == 0) {
 			NEXT_ARG();
 			mpls_parse_label(&mil.mil_label, &argc, &argv);
-		} else if (strcmp(*argv, "proto") == 0) {
-			NEXT_ARG();
-			if (strncmp(*argv, "ipv4", 4) == 0) {
-				mil.mil_proto = AF_INET;
-			} else if (strncmp(*argv, "ipv6", 4) == 0) {
-				mil.mil_proto = AF_INET6;
-			} else if (strncmp(*argv, "packet", 6) == 0) {
-				mil.mil_proto = AF_PACKET;
-			} else {
-				invarg(*argv, "invalid ilm proto");
-			}
-			mil.mil_change_flag |= MPLS_CHANGE_PROTO;
 		} else if (strcmp(*argv, "instructions") == 0) {
 			NEXT_ARG();
 			mpls_parse_instr(instr, &argc, &argv, MPLS_IN);
@@ -1255,19 +1240,6 @@ int print_ilm(int cmd, const struct nlmsghdr *n, void *arg, struct rtattr **tb)
 
 	fprintf(fp, "labelspace %d ", mil->mil_label.ml_labelspace);
 
-	switch(mil->mil_proto) {
-	case AF_INET:
-		fprintf(fp, "ipv4 ");
-		break;
-	case AF_INET6:
-		fprintf(fp, "ipv6 ");
-		break;
-	case AF_PACKET:
-		fprintf(fp, "packet ");
-		break;
-	default:
-		fprintf(fp, "<unknown protocol %d> ", mil->mil_proto);
-	}
 	fprintf (fp,"proto %s ", lookup_proto(mil->mil_owner));
 	fprintf(fp, "\n\t");
 	if (instr && instr->mir_instr_length) {
