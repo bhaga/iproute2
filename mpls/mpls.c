@@ -211,7 +211,11 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 	int c = 0;
 
 	while (argc > 0) {
-		if (strcmp(*argv, "nexthop") == 0) {
+		if (strcmp(*argv, "drop") == 0) {
+			/*make room for new element*/
+			instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
+			instr->mir_instr[c].mir_opcode = MPLS_OP_DROP;
+		} else if (strcmp(*argv, "nexthop") == 0) {
 			NEXT_ARG();
 			inet_prefix addr;
 			/*make room for new element*/
@@ -1106,8 +1110,8 @@ void print_instructions(FILE *fp, struct mpls_instr_req *instr)
 		ci = &instr->mir_instr[i];
 
 		switch (ci->mir_opcode) {
-		case MPLS_OP_NOP:
-			fprintf(fp, "noop ");
+		case MPLS_OP_DROP:
+			fprintf(fp, "drop ");
 			break;
 		case MPLS_OP_POP:
 			fprintf(fp, "pop ");
