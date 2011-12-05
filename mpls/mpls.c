@@ -45,6 +45,7 @@ unsigned int mpls_grp_nhlfe;
 unsigned int mpls_grp_xc;
 unsigned int mpls_grp_lspace;
 unsigned int mpls_grp_get;
+unsigned int mpls_netlink_id;
 
 struct rtnl_handle rth_nhlfe;	/* RTNL for NHLFE*/
 struct rtnl_handle rth_ilm;		/* RTNL for ILM*/
@@ -754,7 +755,7 @@ mpls_ilm_modify(int cmd, unsigned flags, int argc, char **argv)
 
 	req.n.nlmsg_len = NLMSG_LENGTH(GENL_HDRLEN);
 	req.n.nlmsg_flags = NLM_F_REQUEST|flags;
-	req.n.nlmsg_type = PF_MPLS;
+	req.n.nlmsg_type = mpls_netlink_id;
 
 	ghdr = NLMSG_DATA(&req.n);
 	ghdr->cmd = cmd;
@@ -811,7 +812,7 @@ mpls_nhlfe_modify(int cmd, unsigned flags, int argc, char **argv)
 
 	req.n.nlmsg_len = NLMSG_LENGTH(GENL_HDRLEN);
 	req.n.nlmsg_flags = NLM_F_REQUEST|flags;
-	req.n.nlmsg_type = PF_MPLS;
+	req.n.nlmsg_type = mpls_netlink_id;
 
 	ghdr = NLMSG_DATA(&req.n);
 	ghdr->cmd = cmd;
@@ -876,7 +877,7 @@ mpls_xc_modify(int cmd, unsigned flags, int argc, char **argv)
 
 	req.n.nlmsg_len = NLMSG_LENGTH(GENL_HDRLEN);
 	req.n.nlmsg_flags = NLM_F_REQUEST|flags;
-	req.n.nlmsg_type = PF_MPLS;
+	req.n.nlmsg_type = mpls_netlink_id;
 
 	ghdr = NLMSG_DATA(&req.n);
 	ghdr->cmd = cmd;
@@ -941,7 +942,7 @@ mpls_labelspace_modify(int cmd, unsigned flags, int argc, char **argv)
 
 	req.n.nlmsg_len = NLMSG_LENGTH(GENL_HDRLEN);
 	req.n.nlmsg_flags = NLM_F_REQUEST|flags;
-	req.n.nlmsg_type = PF_MPLS;
+	req.n.nlmsg_type = mpls_netlink_id;
 
 	ghdr = NLMSG_DATA(&req.n);
 	ghdr->cmd = cmd;
@@ -1443,7 +1444,7 @@ int print_mpls(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 	int len = n->nlmsg_len;
 	struct rtattr *attrs;
 
-	if (n->nlmsg_type !=  PF_MPLS) {
+	if (n->nlmsg_type !=  mpls_netlink_id) {
 		fprintf(stderr, "Not a controller message, nlmsg_len=%d "
 				"nlmsg_type=0x%x\n", n->nlmsg_len, n->nlmsg_type);
 		return 0;
@@ -1495,7 +1496,7 @@ int mpls_list(int cmd,int argc, char **argv)
 
 	req.n.nlmsg_len = NLMSG_LENGTH(GENL_HDRLEN);
 	req.n.nlmsg_flags = NLM_F_ROOT|NLM_F_MATCH|NLM_F_REQUEST;
-	req.n.nlmsg_type = PF_MPLS;
+	req.n.nlmsg_type = mpls_netlink_id;
 	req.n.nlmsg_seq = rth.dump = ++rth.seq;
 
 	ghdr = NLMSG_DATA(&req.n);
@@ -1681,6 +1682,15 @@ static int _mpls_get_mcast_group_ids(struct nlmsghdr *n){
 
 	attrs = (struct rtattr *) ((char *) ghdr + GENL_HDRLEN);
 	parse_rtattr(tb, CTRL_ATTR_MAX, attrs, len);
+
+	if(tb[CTRL_ATTR_FAMILY_ID]) {
+		__u32 *id = RTA_DATA(tb[CTRL_ATTR_FAMILY_ID]);
+		mpls_netlink_id = *id;
+	} else {
+		fprintf(stderr, "No family ID\n");
+		return -1;
+	}
+
 
 	if (tb[CTRL_ATTR_MCAST_GROUPS]) {
 		struct rtattr *tb2[GENL_MAX_FAM_GRPS + 1];

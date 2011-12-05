@@ -1,12 +1,7 @@
 #ifndef IPROUTE_MPLS_H
 #define IPROUTE_MPLS_H
 
-#ifndef AF_MPLS
-#define AF_MPLS 28
-#endif
-#ifndef PF_MPLS
-#define PF_MPLS AF_MPLS
-#endif
+extern unsigned int mpls_netlink_id;
 
 /* Message structure. */
 struct message

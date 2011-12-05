@@ -43,7 +43,7 @@ int accept_msg(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
         int len = n->nlmsg_len;
         struct rtattr *attrs;
 
-        if (n->nlmsg_type !=  PF_MPLS) {
+        if (n->nlmsg_type !=  mpls_netlink_id) {
                 fprintf(stderr, "Not a controller message, nlmsg_len=%d "
                         "nlmsg_type=0x%x\n", n->nlmsg_len, n->nlmsg_type);
                 return 0;
