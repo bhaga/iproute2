@@ -66,8 +66,8 @@ static void usage(void)
 	fprintf(stderr, "Usage: mpls ilm CMD label LABEL labelspace NUMBER [instructions INSTR]\n");
 	fprintf(stderr, "       mpls nhlfe CMD key KEY [[mtu MTU] | [propagate_ttl | no_propagate_ttl] | [instructions INSTR]]\n");
 	fprintf(stderr, "       mpls xc CMD ilm_label LABEL ilm_labelspace NUMBER nhlfe_key KEY\n");
-	fprintf(stderr, "       mpls labelspace set dev NAME labelspace NUMBER\n");
-	fprintf(stderr, "       mpls labelspace set dev NAME labelspace -1\n");
+	fprintf(stderr, "       mpls labelspace set NAME NUMBER\n");
+	fprintf(stderr, "       mpls labelspace set NAME -1\n");
 	fprintf(stderr, "       mpls tunnel add nhlfe KEY\n");
 	fprintf(stderr, "       mpls tunnel change dev NAME nhlfe KEY\n");
 	fprintf(stderr, "       mpls tunnel del dev NAME\n");
@@ -75,7 +75,7 @@ static void usage(void)
 	fprintf(stderr, "       mpls ilm show [label LABEL [labelspace NUMBER]]\n");
 	fprintf(stderr, "       mpls nhlfe show [key KEY]\n");
 	fprintf(stderr, "       mpls xc show [ilm_label LABEL [ilm_labelspace NUMBER]]\n");
-	fprintf(stderr, "       mpls labelspace show [dev NAME]\n");
+	fprintf(stderr, "       mpls labelspace show [NAME]\n");
 	fprintf(stderr, "       mpls tunnel show [dev NAME]\n");
 	fprintf(stderr, "       mpls stats\n");
 	fprintf(stderr, "       mpls show\n");
@@ -946,22 +946,14 @@ mpls_labelspace_modify(int cmd, unsigned flags, int argc, char **argv)
 	ghdr = NLMSG_DATA(&req.n);
 	ghdr->cmd = cmd;
 
-	while (argc > 0) {
-		if (strcmp(*argv, "dev") == 0) {
-			NEXT_ARG();
-			ls.mls_ifindex = ll_name_to_index(*argv);
-		} else if (strcmp(*argv, "labelspace") == 0) {
-			NEXT_ARG();
-			if (get_unsigned(&labelspace, *argv, 0))
-				invarg(*argv, "invalid labelspace");
-			ls.mls_labelspace = labelspace;
-		} else {
-			usage();
-		}
-		argc--; argv++;
-	}
+	ls.mls_ifindex = ll_name_to_index(*argv);
 
-	if (ls.mls_ifindex == 0 || ls.mls_labelspace == -2) {
+	NEXT_ARG();
+	if (get_unsigned(&labelspace, *argv, 0))
+		invarg(*argv, "invalid labelspace");
+	ls.mls_labelspace = labelspace;
+
+	if (ls.mls_ifindex == 0 || ls.mls_labelspace < -1) {
 		fprintf(stderr, "Invalid arguments\n");
 		exit(1);
 	}
