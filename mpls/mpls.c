@@ -948,9 +948,14 @@ mpls_labelspace_modify(int cmd, unsigned flags, int argc, char **argv)
 
 	ls.mls_ifindex = ll_name_to_index(*argv);
 
-	NEXT_ARG();
-	if (get_unsigned(&labelspace, *argv, 0))
-		invarg(*argv, "invalid labelspace");
+	if(NEXT_ARG_OK()) {
+		NEXT_ARG();
+		if (get_unsigned(&labelspace, *argv, 0))
+			invarg(*argv, "invalid labelspace");
+	}
+	else
+		labelspace = 0;
+
 	ls.mls_labelspace = labelspace;
 
 	if (ls.mls_ifindex == 0 || ls.mls_labelspace < -1) {
