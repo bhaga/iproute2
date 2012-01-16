@@ -64,7 +64,7 @@ int mpls_list(int cmd,int argc, char **argv);
 
 static void usage(void)
 {
-	fprintf(stderr, "Usage: mpls ilm CMD label LABEL labelspace NUMBER [instructions INSTR]\n");
+	fprintf(stderr, "Usage: mpls ilm CMD label LABEL [labelspace NUMBER] FWD\n");
 	fprintf(stderr, "       mpls nhlfe CMD key KEY [[mtu MTU] | [propagate_ttl | no_propagate_ttl] | [instructions INSTR]]\n");
 	fprintf(stderr, "       mpls xc CMD ilm_label LABEL ilm_labelspace NUMBER nhlfe_key KEY\n");
 	fprintf(stderr, "       mpls labelspace set NAME NUMBER\n");
@@ -92,7 +92,10 @@ static void usage(void)
 	fprintf(stderr, "NAME   := network device name (i.e. eth0)\n");
 	fprintf(stderr, "ADDR   := ipv6 or ipv4 address\n");
 	fprintf(stderr, "NH     := nexthop NAME [none|packet|ADDR]\n");
-	fprintf(stderr, "FWD    := forward KEY\n");
+	fprintf(stderr, "FWD    := forward KEY | \n");
+	fprintf(stderr, "	  expfwd EXP - KEY ... [default - KEY]\n");
+	//fprintf(stderr, "	  nffwd MASK  NFMARK - KEY ... [default - KEY] |\n");
+	//fprintf(stderr, "	  dsfwd MASK  DSCP - KEY ... [default - KEY] \n");
 	fprintf(stderr, "SET_EXP:= set-exp EXP | \n");
 	fprintf(stderr, "	  nf2exp MASK  NFMARK - EXP ... [default - EXP] |\n");
 	fprintf(stderr, "	  tc2exp MASK  TCINDEX - EXP ... [default - EXP] |\n");
@@ -103,13 +106,10 @@ static void usage(void)
 	fprintf(stderr, "NFMARK := 0 .. 63\n");
 	fprintf(stderr, "TCINDEX:= 0 .. 63\n");
 	fprintf(stderr, "MASK   := 0x0 .. 0x3f | 00 .. 077 | 0 .. 63 \n");
-	fprintf(stderr, "INSTR  := NH | PUSH | pop | deliver | peek | FWD |\n");
-	fprintf(stderr, "	  set-dscp DSCP | set-tcindex TCINDEX | set-rx-if NAME |\n");
+	fprintf(stderr, "INSTR  := NH | PUSH | pop | peek | FWD |\n");
+	fprintf(stderr, "	  set-dscp DSCP | set-tcindex TCINDEX | \n");
 	fprintf(stderr, "	  exp2tc EXP - TCINDEX ... [default - TCINDEX]| \n");
-	fprintf(stderr, "	  exp2ds EXP - DSCP ... [default - DSCP]| \n");
-	fprintf(stderr, "	  expfwd EXP - KEY ... [default - KEY]|\n");
-	fprintf(stderr, "	  nffwd MASK  NFMARK - KEY ... [default - KEY] |\n");
-	fprintf(stderr, "	  dsfwd MASK  DSCP - KEY ... [default - KEY] \n");
+	fprintf(stderr, "	  exp2ds EXP - DSCP ... [default - DSCP] \n");
 	fprintf(stderr, "\n");
 	exit(-1);
 }
@@ -376,8 +376,8 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 				unsigned int exp;
 				unsigned int mask;
 				int got_default =0;
-				if (direction == MPLS_IN)
-					invarg(*argv, "invalid ILM instruction");
+				/*if (direction == MPLS_IN)
+					invarg(*argv, "invalid ILM instruction");*/
 				NEXT_ARG();
 				/*make room for new element*/
 				instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
@@ -446,30 +446,23 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 			instr->mir_instr[c].mir_fwd.u.ml_key = key;
 			instr->mir_instr[c].mir_opcode = MPLS_OP_FWD;
 		} else if (strcmp(*argv, "pop") == 0) {
-			if (direction == MPLS_OUT)
-				invarg(*argv, "invalid NHLFE instruction");
+			/*if (direction == MPLS_OUT)
+				invarg(*argv, "invalid NHLFE instruction");*/
 			/*make room for new element*/
 			instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
 
 			instr->mir_instr[c].mir_opcode = MPLS_OP_POP;
 		} else if (strcmp(*argv, "peek") == 0) {
-			if (direction == MPLS_OUT)
-				invarg(*argv, "invalid NHLFE instruction");
+			/*if (direction == MPLS_OUT)
+				invarg(*argv, "invalid NHLFE instruction");*/
 			/*make room for new element*/
 			instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
 
 			instr->mir_instr[c].mir_opcode = MPLS_OP_PEEK;
-		} else if (strcmp(*argv, "deliver") == 0) {
-			if (direction == MPLS_OUT)
-				invarg(*argv, "invalid NHLFE instruction");
-			/*make room for new element*/
-			instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
-
-			instr->mir_instr[c].mir_opcode = MPLS_OP_DLV;
-		} else if (strcmp(*argv, "set-dscp") == 0) {
+		}  else if (strcmp(*argv, "set-dscp") == 0) {
 			__u32 dscp;
-			if (direction == MPLS_OUT)
-				invarg(*argv, "invalid NHLFE instruction");
+			/*if (direction == MPLS_OUT)
+				invarg(*argv, "invalid NHLFE instruction");*/
 			NEXT_ARG();
 			if (get_unsigned(&dscp, *argv, 0))
 				invarg(*argv, "invalid DSCP");
@@ -488,15 +481,6 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 
 			instr->mir_instr[c].mir_opcode = MPLS_OP_SET_TC;
 			instr->mir_instr[c].mir_set_tc = tcindex;
-		} else if (strcmp(*argv, "set-rx-if") == 0) {
-			if (direction == MPLS_OUT)
-				invarg(*argv, "invalid NHLFE instruction");
-			NEXT_ARG();
-			/*make room for new element*/
-			instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
-
-			instr->mir_instr[c].mir_opcode = MPLS_OP_SET_RX;
-			instr->mir_instr[c].mir_set_rx =ll_name_to_index(*argv);
 		} else if (strcmp(*argv, "expfwd") == 0) {
 			int done = 0;
 			unsigned int exp;
@@ -585,8 +569,8 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 			unsigned int exp;
 			unsigned int dscp;
 			int got_default = 0;
-			if (direction == MPLS_OUT)
-				invarg(*argv, "invalid NHLFE instruction");
+			/*if (direction == MPLS_OUT)
+				invarg(*argv, "invalid NHLFE instruction");*/
 			/*make room for new element*/
 			instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
 
@@ -1125,17 +1109,10 @@ void print_instructions(FILE *fp, struct mpls_instr_req *instr)
 			fprintf(fp, "forward ");
 			print_label(fp, &ci->mir_fwd);
 			break;
-		case MPLS_OP_DLV:
-			fprintf(fp, "deliver ");
-			break;
 		case MPLS_OP_SET:
 			fprintf(fp, "set %s ",
 					ll_index_to_name(ci->mir_set.mni_if));
 			print_address(fp, &ci->mir_set.mni_addr);
-			break;
-		case MPLS_OP_SET_RX:
-			fprintf(fp, "set-rx-if %s ",
-					ll_index_to_name(ci->mir_set_rx));
 			break;
 		case MPLS_OP_SET_TC:
 			fprintf(fp, "set-tcindex %hu ",ci->mir_set_tc);
