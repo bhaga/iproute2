@@ -748,14 +748,13 @@ mpls_ilm_modify(int cmd, unsigned flags, int argc, char **argv)
 		if (strcmp(*argv, "labelspace") == 0) {
 			__u32 ls;
 			NEXT_ARG();
-			if (get_unsigned(&ls, *argv, 0) || ls > 255)
+			if (get_unsigned(&ls, *argv, 0))
 				invarg(*argv, "invalid labelspace");
 			mil.mil_label.ml_labelspace = ls;
 		} else if (strcmp(*argv, "label") == 0) {
 			NEXT_ARG();
 			mpls_parse_label(&mil.mil_label, &argc, &argv);
-		} else if (strcmp(*argv, "instructions") == 0) {
-			NEXT_ARG();
+		} else if (strcmp(*argv, "forward") == 0 || strcmp(*argv, "expfwd") == 0) {
 			mpls_parse_instr(instr, &argc, &argv, MPLS_IN);
 			mil.mil_change_flag |= MPLS_CHANGE_INSTR;
 		} else {
