@@ -111,6 +111,11 @@ static void usage(void)
 	fprintf(stderr, "	  exp2tc EXP - TCINDEX ... [default - TCINDEX]| \n");
 	fprintf(stderr, "	  exp2ds EXP - DSCP ... [default - DSCP] \n");
 	fprintf(stderr, "\n");
+	fprintf(stderr, "!!!NOTE - recursive label lookup is done in context label space,\n");
+	fprintf(stderr, "        - that's specified by upper label\n");
+	fprintf(stderr, "        - e.g if upper label is 300, label space\n");
+	fprintf(stderr, "        - in which the next label is looked is 300\n");
+	fprintf(stderr, "\n");
 	exit(-1);
 }
 
