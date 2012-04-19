@@ -20,7 +20,7 @@ static const struct message rtproto_str[] = {
   {RTPROT_MRT,      "MRT"},
   {RTPROT_ZEBRA,    "Zebra"},
   {RTPROT_BIRD,     "BIRD"},
-  {RTPROT_XORP,		"XORP"},
+  {RTPROT_XORP,     "XORP"},
   {0,               NULL}
 };
 

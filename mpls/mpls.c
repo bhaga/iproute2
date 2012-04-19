@@ -146,7 +146,7 @@ int print_stats()
 		return -1;
 	}
 
-	fprintf(stdout,buf);
+	fprintf(stdout, "%s", buf);
 	return 0;
 }
 
@@ -1083,7 +1083,7 @@ void mpls_smart_print_key(FILE *fp, unsigned int key, int index, int *first,int 
 	}
 }
 
-void print_instructions(FILE *fp, struct mpls_instr_req *instr) 
+void print_instructions(FILE *fp, struct mpls_instr_req *instr)
 {
 	struct mpls_instr_elem *ci;   /* current instruction */
 	unsigned int key;
