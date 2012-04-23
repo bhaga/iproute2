@@ -25,12 +25,13 @@
 #include <math.h>
 #include <asm/types.h>
 #include <linux/if_ether.h>
-#include <linux/mpls.h>
 #include <linux/ip.h>
+#include <linux/if.h>
 #include <linux/if_tunnel.h>
 #include <linux/if_arp.h>
 #include <sys/ioctl.h>
 #include <linux/genetlink.h>
+#include <linux/mpls.h>
 
 #include "SNAPSHOT.h"
 #include "utils.h"
@@ -940,6 +941,7 @@ mpls_labelspace_modify(int cmd, unsigned flags, int argc, char **argv)
 	if(NEXT_ARG_OK()) {
 		NEXT_ARG();
 		if (get_unsigned(&labelspace, *argv, 0))
+		    if (!get_integer((int*) &labelspace, *argv, 0) && labelspace != (__u32) -1)
 			invarg(*argv, "invalid labelspace");
 	}
 	else
