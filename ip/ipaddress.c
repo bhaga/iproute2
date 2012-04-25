@@ -118,7 +118,7 @@ void print_link_flags(FILE *fp, unsigned flags, unsigned mdown)
 }
 
 static const char *oper_states[] = {
-	"UNKNOWN", "NOTPRESENT", "DOWN", "LOWERLAYERDOWN", 
+	"UNKNOWN", "NOTPRESENT", "DOWN", "LOWERLAYERDOWN",
 	"TESTING", "DORMANT",	 "UP"
 };
 
@@ -281,6 +281,14 @@ int print_linkinfo(const struct sockaddr_nl *who,
 
 	if (tb[IFLA_MTU])
 		fprintf(fp, "mtu %u ", *(int*)RTA_DATA(tb[IFLA_MTU]));
+	if (tb[IFLA_LABSPACE]) {
+		int labelspace = *(int*)RTA_DATA(tb[IFLA_LABSPACE]);
+		fprintf(fp, "label space ");
+		if (labelspace == -1)
+			fprintf(fp, "%d ", labelspace);
+		else
+			fprintf(fp, "%u ", labelspace);
+	}
 	if (tb[IFLA_QDISC])
 		fprintf(fp, "qdisc %s ", (char*)RTA_DATA(tb[IFLA_QDISC]));
 	if (tb[IFLA_MASTER]) {
@@ -289,7 +297,7 @@ int print_linkinfo(const struct sockaddr_nl *who,
 	}
 	if (tb[IFLA_OPERSTATE])
 		print_operstate(fp, *(__u8 *)RTA_DATA(tb[IFLA_OPERSTATE]));
-		
+
 	if (filter.showqueue)
 		print_queuelen(fp, tb);
 
@@ -320,7 +328,7 @@ int print_linkinfo(const struct sockaddr_nl *who,
 		print_linktype(fp, tb[IFLA_LINKINFO]);
 
 	if (do_link && tb[IFLA_IFALIAS])
-		fprintf(fp,"\n    alias %s", 
+		fprintf(fp,"\n    alias %s",
 			(const char *) RTA_DATA(tb[IFLA_IFALIAS]));
 
 	if (do_link && tb[IFLA_STATS64] && show_stats) {
@@ -870,7 +878,7 @@ flush_done:
 				if (show_stats) {
 					if (round == 0)
 						printf("Nothing to flush.\n");
-					else 
+					else
 						printf("*** Flush is complete after %d round%s ***\n", round, round>1?"s":"");
 				}
 				fflush(stdout);

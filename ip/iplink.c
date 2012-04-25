@@ -48,6 +48,7 @@ void iplink_usage(void)
 		fprintf(stderr, "                   [ address LLADDR ]\n");
 		fprintf(stderr, "                   [ broadcast LLADDR ]\n");
 		fprintf(stderr, "                   [ mtu MTU ]\n");
+		fprintf(stderr, "                   [ {label_space | ls} LS ]\n");
 		fprintf(stderr, "                   type TYPE [ ARGS ]\n");
 		fprintf(stderr, "       ip link delete DEV type TYPE [ ARGS ]\n");
 		fprintf(stderr, "\n");
@@ -66,6 +67,7 @@ void iplink_usage(void)
 	fprintf(stderr, "	                  [ address LLADDR ]\n");
 	fprintf(stderr, "	                  [ broadcast LLADDR ]\n");
 	fprintf(stderr, "	                  [ mtu MTU ]\n");
+	fprintf(stderr, "	                  [ {label_space | ls} LS ]\n");
 	fprintf(stderr, "	                  [ netns PID ]\n");
 	fprintf(stderr, "	                  [ netns NAME ]\n");
 	fprintf(stderr, "			  [ alias NAME ]\n");
@@ -227,7 +229,7 @@ int iplink_parse_vf(int vf, int *argcp, char ***argvp,
 			}
 			ivt.vf = vf;
 			addattr_l(&req->n, sizeof(*req), IFLA_VF_TX_RATE, &ivt, sizeof(ivt));
-		
+
 		} else {
 			/* rewind arg */
 			PREV_ARG();
@@ -255,6 +257,7 @@ int iplink_parse(int argc, char **argv, struct iplink_req *req,
 	int mtu = -1;
 	int netns = -1;
 	int vf = -1;
+	int label_space = -2;
 
 	*group = -1;
 	ret = argc;
@@ -301,16 +304,25 @@ int iplink_parse(int argc, char **argv, struct iplink_req *req,
 			if (get_integer(&mtu, *argv, 0))
 				invarg("Invalid \"mtu\" value\n", *argv);
 			addattr_l(&req->n, sizeof(*req), IFLA_MTU, &mtu, 4);
-                } else if (strcmp(*argv, "netns") == 0) {
-                        NEXT_ARG();
-                        if (netns != -1)
-                                duparg("netns", *argv);
+		} else if (strcmp(*argv, "label_space") == 0 || strcmp(*argv, "ls") == 0) {
+			NEXT_ARG();
+			if (label_space != -2)
+				duparg("label_space", *argv);
+			if (get_unsigned((unsigned*) &label_space, *argv, 0)) {
+				if (get_integer(&label_space, *argv, 0) && label_space < -1)
+					invarg("Invalid \"label space\" value\n", *argv);
+			}
+			addattr_l(&req->n, sizeof(*req), IFLA_LABSPACE, &label_space, 4);
+		} else if (strcmp(*argv, "netns") == 0) {
+			NEXT_ARG();
+			if (netns != -1)
+				duparg("netns", *argv);
 			if ((netns = get_netns_fd(*argv)) >= 0)
 				addattr_l(&req->n, sizeof(*req), IFLA_NET_NS_FD, &netns, 4);
 			else if (get_integer(&netns, *argv, 0) == 0)
 				addattr_l(&req->n, sizeof(*req), IFLA_NET_NS_PID, &netns, 4);
 			else
-                                invarg("Invalid \"netns\" value\n", *argv);
+				invarg("Invalid \"netns\" value\n", *argv);
 		} else if (strcmp(*argv, "multicast") == 0) {
 			NEXT_ARG();
 			req->i.ifi_change |= IFF_MULTICAST;
