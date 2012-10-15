@@ -6,9 +6,11 @@
  * Authors:
  *          James Leu        <jleu@mindspring.com>
  *          Ramon Casellas   <casellas@infres.enst.fr>
- *          Igor Maravić	 <igorm@etf.rs> - Innovation Center, School of Electrical Engineering in Belgrade
+ *          Igor Maravic     <igorm@etf.rs> - Innovation Center, School of Electrical Engineering in Belgrade
+ *
  *   (c) 1999-2004   James Leu        <jleu@mindspring.com>
  *   (c) 2003-2004   Ramon Casellas   <casellas@infres.enst.fr>
+ *   (c) 2011-2012   Igor Maravic     <igorm@etf.rs>
  *
  * include/linux/mpls.h
  *      Data types and structs used by userspace programs to access MPLS
@@ -31,11 +33,12 @@
 #include <net/if.h>
 #endif
 
+
 /**
 *MPLS DEBUGGING
 **/
 
-#define MPLS_LINUX_VERSION	0x01090900
+#define MPLS_LINUX_VERSION	0x01090910
 
 /*based on netlink_group_mask from net/netlink/af_netlink.c */
 #define _group_mask(group_id) group_id ? 1 << (group_id - 1) : 0
@@ -91,165 +94,137 @@ enum mpls_opcode_enum {
 
 enum mpls_label_type_enum {
 	MPLS_LABEL_GEN = 1,
-	MPLS_LABEL_ATM,
-	MPLS_LABEL_FR,
 	MPLS_LABEL_KEY
 };
 
 #define MPLS_HDR_LEN  4
 
-struct mpls_label_atm {
-	u_int16_t  mla_vpi;
-	u_int16_t  mla_vci;
-};
-
 struct mpls_label {
-	enum mpls_label_type_enum ml_type;
+	enum mpls_label_type_enum type;
 	union {
-		u_int32_t ml_key;
-		u_int32_t ml_gen;
-		u_int32_t ml_fr;
-		struct mpls_label_atm ml_atm;
-	} u;
-	int ml_labelspace;
+		__u32 key;
+		__u32 gen;
+	};
+	int labelspace;
 };
 
 struct mpls_in_label_req {
-	struct mpls_label mil_label;
-	unsigned char     mil_change_flag;
-	unsigned char     mil_owner;   /* Routing protocol */
+	struct mpls_label label;
+	__u8 change_flag;
+	__u8 owner;   /* Routing protocol */
 };
 
 #define MPLS_LABELSPACE_MAX	255
 
 struct mpls_labelspace_req {
-	int mls_ifindex;                  /* Index to the MPLS-enab. interface*/
-	int mls_labelspace;               /* Labelspace IN/SET -- OUT/GET     */
+	int ifindex;                  /* Index to the MPLS-enab. interface*/
+	int labelspace;               /* Labelspace IN/SET -- OUT/GET     */
 };
 
 struct mpls_nexthop_info {
-	unsigned int    mni_if;
+	__u32 iface;
 	union {
-		struct sockaddr			common;
-		struct sockaddr_in		ipv4;
-		struct sockaddr_in6		ipv6;
-	} mni_nh;
+		struct sockaddr addr;
+		struct sockaddr_in ipv4;
+		struct sockaddr_in6 ipv6;
+	};
 };
-#define mni_addr mni_nh.common
 
 struct mpls_out_label_req {
-	struct mpls_label mol_label;
-	u_int32_t         mol_mtu;
-	int8_t            mol_propagate_ttl;
-	unsigned char     mol_change_flag;
-	unsigned char     mol_owner;        /* Routing protocol */
+	struct mpls_label label;
+	__u32 mtu;
+	__u8 propagate_ttl;
+	__u8 change_flag;
+	__u8 owner;        /* Routing protocol */
 };
 
 struct mpls_xconnect_req {
-	struct mpls_label mx_in;
-	struct mpls_label mx_out;
-	unsigned char     mx_owner;        /* Routing protocol */
+	struct mpls_label in;
+	struct mpls_label out;
+	__u8 owner;        /* Routing protocol */
 };
 
 struct mpls_tunnel_req {
-	char         mt_ifname[IFNAMSIZ];
-	unsigned int mt_nhlfe_key;
+	char ifname[IFNAMSIZ];
+	__u32 nhlfe_key;
 };
 
 #define MPLS_NFMARK_NUM 64
 
 struct mpls_nfmark_fwd {
-	unsigned int   nf_key[MPLS_NFMARK_NUM];
-	unsigned short nf_mask;
+	__u32 key[MPLS_NFMARK_NUM];
+	__u16 mask;
 };
 
 #define MPLS_DSMARK_NUM 64
 
 struct mpls_dsmark_fwd {
-	unsigned int  df_key[MPLS_DSMARK_NUM];
-	unsigned char df_mask;
+	__u32 key[MPLS_DSMARK_NUM];
+	__u8 mask;
 };
 
 #define MPLS_TCINDEX_NUM 64
 
 struct mpls_tcindex_fwd {
-	unsigned int   tc_key[MPLS_TCINDEX_NUM];
-	unsigned short tc_mask;
+	__u32 key[MPLS_TCINDEX_NUM];
+	__u16 mask;
 };
 
 #define MPLS_EXP_NUM 8
 
 struct mpls_exp_fwd {
-	unsigned int ef_key[MPLS_EXP_NUM];
+	__u32 key[MPLS_EXP_NUM];
 };
 
 struct mpls_exp2tcindex {
-	unsigned short e2t[MPLS_EXP_NUM];
+	__u16 data[MPLS_EXP_NUM];
 };
 
 struct mpls_exp2dsmark {
-	unsigned char e2d[MPLS_EXP_NUM];
+	__u8 data[MPLS_EXP_NUM];
 };
 
 struct mpls_tcindex2exp {
-	unsigned char t2e_mask;
-	unsigned char t2e[MPLS_TCINDEX_NUM];
+	__u8 mask;
+	__u8 data[MPLS_TCINDEX_NUM];
 };
 
 struct mpls_dsmark2exp {
-	unsigned char d2e_mask;
-	unsigned char d2e[MPLS_DSMARK_NUM];
+	__u8 mask;
+	__u8 data[MPLS_DSMARK_NUM];
 };
 
 struct mpls_nfmark2exp {
-	unsigned char n2e_mask;
-	unsigned char n2e[MPLS_NFMARK_NUM];
+	__u8 mask;
+	__u8 data[MPLS_NFMARK_NUM];
 };
 
 struct mpls_instr_elem {
-	unsigned short mir_opcode;
-	unsigned char  mir_direction;
+	__u16 opcode;
+	__u8 direction;
 	union {
-		struct mpls_label        push;
-		struct mpls_label        fwd;
-		struct mpls_nfmark_fwd   nf_fwd;
-		struct mpls_dsmark_fwd   ds_fwd;
-		struct mpls_exp_fwd      exp_fwd;
+		struct mpls_label push;
+		struct mpls_label fwd;
+		struct mpls_nfmark_fwd nf_fwd;
+		struct mpls_dsmark_fwd ds_fwd;
+		struct mpls_exp_fwd exp_fwd;
 		struct mpls_nexthop_info set;
-		unsigned int             set_rx;
-		unsigned short           set_tc;
-		unsigned short           set_ds;
-		unsigned char            set_exp;
-		struct mpls_exp2tcindex  exp2tc;
-		struct mpls_exp2dsmark   exp2ds;
-		struct mpls_tcindex2exp  tc2exp;
-		struct mpls_dsmark2exp   ds2exp;
-		struct mpls_nfmark2exp   nf2exp;
-	} mir_data;
+		__u32 set_rx;
+		__u16 set_tc;
+		__u16 set_ds;
+		__u8 set_exp;
+		struct mpls_exp2tcindex exp2tc;
+		struct mpls_exp2dsmark exp2ds;
+		struct mpls_tcindex2exp tc2exp;
+		struct mpls_dsmark2exp ds2exp;
+		struct mpls_nfmark2exp nf2exp;
+	};
 };
 
-/* Standard shortcuts */
-#define mir_push       mir_data.push
-#define mir_fwd        mir_data.fwd
-#define mir_nf_fwd     mir_data.nf_fwd
-#define mir_ds_fwd     mir_data.ds_fwd
-#define mir_exp_fwd    mir_data.exp_fwd
-#define mir_set        mir_data.set
-#define mir_set_rx     mir_data.set_rx
-#define mir_set_tc     mir_data.set_tc
-#define mir_set_tx     mir_data.set_tx
-#define mir_set_ds     mir_data.set_ds
-#define mir_set_exp    mir_data.set_exp
-#define mir_exp2tc     mir_data.exp2tc
-#define mir_exp2ds     mir_data.exp2ds
-#define mir_tc2exp     mir_data.tc2exp
-#define mir_ds2exp     mir_data.ds2exp
-#define mir_nf2exp     mir_data.nf2exp
-
 struct mpls_instr_req {
-	unsigned char                mir_instr_length;
-	unsigned char                mir_direction;
-	struct mpls_instr_elem       mir_instr[0];
+	__u8 instr_length;
+	__u8 direction;
+	struct mpls_instr_elem instr[0];
 };
 
 /* genetlink interface */

@@ -86,8 +86,8 @@ static void usage(void)
 	fprintf(stderr, "Where:\n");
 	fprintf(stderr, "CMD    := add | del | change\n");
 	fprintf(stderr, "NUMBER := 0 .. 255\n");
-	fprintf(stderr, "TYPE   := gen | atm | fr\n");
-	fprintf(stderr, "VALUE  := 16 .. 1048575 | <VPI>/<VCI> | 16 .. 1023\n");
+	fprintf(stderr, "TYPE   := gen\n");
+	fprintf(stderr, "VALUE  := 16 .. 1048575\n");
 	fprintf(stderr, "LABEL  := TYPE VALUE\n");
 	fprintf(stderr, "KEY    := any unsigned int, except 0\n");
 	fprintf(stderr, "NAME   := network device name (i.e. eth0)\n");
@@ -169,17 +169,13 @@ int mpls_table_list(int argc, char **argv)
 }
 
 void mpls_parse_label (struct mpls_label *label, int *pargc, char ***pargv) {
-	unsigned int l1, l2;
+	unsigned int l1;
 	char *value;
 	int argc = *pargc;
 	char **argv = *pargv;
 
-	if (strncmp(*argv, "fr", 2) == 0) {
-		label->ml_type = MPLS_LABEL_FR;
-	} else if (strncmp(*argv, "atm", 3) == 0) {
-		label->ml_type = MPLS_LABEL_ATM;
-	} else if (strncmp(*argv, "gen", 3) == 0) {
-		label->ml_type = MPLS_LABEL_GEN;
+	if (strncmp(*argv, "gen", 3) == 0) {
+		label->type = MPLS_LABEL_GEN;
 	} else {
 		invarg(*argv, "invalid mpls label type");
 	}
@@ -187,21 +183,12 @@ void mpls_parse_label (struct mpls_label *label, int *pargc, char ***pargv) {
 	NEXT_ARG();
 	value = *argv;
 
-	switch (label->ml_type) {
+	switch (label->type) {
 	case MPLS_LABEL_GEN:
 		if (get_unsigned(&l1, value, 0) || l1 > 1048575)
 			invarg(value, "invalid label value");
-		label->u.ml_gen = l1;
+		label->gen = l1;
 		break;
-	case MPLS_LABEL_ATM:
-		if (sscanf(value, "%u/%d", &l1, &l2) != 2)
-			invarg(value, "invalid label value");
-		label->u.ml_atm.mla_vpi = l1;
-		label->u.ml_atm.mla_vci = l2;
-	case MPLS_LABEL_FR:
-		if (get_unsigned(&l1, value, 0) || l1 > 1023)
-			invarg(value, "invalid label value");
-		label->u.ml_fr = l1;
 	default:
 		fprintf(stderr, "Invalid label type!\n");
 		exit(-1);
@@ -221,33 +208,33 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 		if (strcmp(*argv, "drop") == 0) {
 			/*make room for new element*/
 			instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
-			instr->mir_instr[c].mir_opcode = MPLS_OP_DROP;
+			instr->instr[c].opcode = MPLS_OP_DROP;
 		} else if (strcmp(*argv, "nexthop") == 0) {
 			NEXT_ARG();
 			inet_prefix addr;
 			/*make room for new element*/
 			instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
 
-			instr->mir_instr[c].mir_opcode = MPLS_OP_SET;
-			instr->mir_instr[c].mir_set.mni_if = ll_name_to_index(*argv);
+			instr->instr[c].opcode = MPLS_OP_SET;
+			instr->instr[c].set.iface = ll_name_to_index(*argv);
 			NEXT_ARG();
 			if(strcmp(*argv, "none") == 0) {
-				struct sockaddr *s = &instr->mir_instr[c].mir_set.mni_addr;
+				struct sockaddr *s = &instr->instr[c].set.addr;
 				memset(s, 0, sizeof(struct sockaddr));
 			} else if (strcmp(*argv, "packet") == 0) {
-				struct sockaddr *s = &instr->mir_instr[c].mir_set.mni_addr;
+				struct sockaddr *s = &instr->instr[c].set.addr;
 				s->sa_family = AF_PACKET;
 			} else if(**argv >= '0' && **argv <= '9') {
 				get_prefix(&addr, *argv, 0);
 				switch(addr.family){
 				case AF_INET:{
-					instr->mir_instr[c].mir_set.mni_nh.ipv4.sin_family = AF_INET;
-					memcpy(&instr->mir_instr[c].mir_set.mni_nh.ipv4.sin_addr, &addr.data, addr.bytelen);
+					instr->instr[c].set.ipv4.sin_family = AF_INET;
+					memcpy(&instr->instr[c].set.ipv4.sin_addr, &addr.data, addr.bytelen);
 				}
 				break;
 				case AF_INET6:{
-					instr->mir_instr[c].mir_set.mni_nh.ipv6.sin6_family = AF_INET6;
-					memcpy(&instr->mir_instr[c].mir_set.mni_nh.ipv6.sin6_addr, &addr.data, addr.bytelen);
+					instr->instr[c].set.ipv6.sin6_family = AF_INET6;
+					memcpy(&instr->instr[c].set.ipv6.sin6_addr, &addr.data, addr.bytelen);
 				}
 				break;
 				default:
@@ -267,8 +254,8 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 				//make room for new element
 				instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
 
-				instr->mir_instr[c].mir_opcode = MPLS_OP_SET_EXP;
-				instr->mir_instr[c].mir_set_exp = exp;
+				instr->instr[c].opcode = MPLS_OP_SET_EXP;
+				instr->instr[c].set_exp = exp;
 				NEXT_ARG(); c++;
 			} else if (strcmp(*argv, "nf2exp") == 0) {
 				int done = 0;
@@ -280,7 +267,7 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 				/*make room for new element*/
 				instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
 				if (!get_unsigned(&mask, *argv, 0)) {
-					instr->mir_instr[c].mir_nf2exp.n2e_mask = mask;
+					instr->instr[c].nf2exp.mask = mask;
 					do {
 						NEXT_ARG();
 						if(strcmp(*argv, "default") == 0){
@@ -301,13 +288,13 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 							int i;
 							for (i=0;i<MPLS_NFMARK_NUM;i++){
 								if((i & mask) == (nfmark & mask) )
-									instr->mir_instr[c].mir_nf2exp.n2e[i] = exp;
+									instr->instr[c].nf2exp.data[i] = exp;
 							}
 						} else {
 							int i;
 							for (i=0;i<MPLS_NFMARK_NUM;i++){
-								if(instr->mir_instr[c].mir_nf2exp.n2e[i]==0)
-									instr->mir_instr[c].mir_nf2exp.n2e[i] = exp;
+								if(instr->instr[c].nf2exp.data[i]==0)
+									instr->instr[c].nf2exp.data[i] = exp;
 							}
 						}
 						if(!NEXT_ARG_OK()){
@@ -321,7 +308,7 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 				/*if we didn't reach last argument we will have here 1*/
 				if(done)
 					PREV_ARG();
-				instr->mir_instr[c].mir_opcode = MPLS_OP_NF2EXP;
+				instr->instr[c].opcode = MPLS_OP_NF2EXP;
 				NEXT_ARG(); c++;
 			} else if (strcmp(*argv, "tc2exp") == 0) {
 				int done = 0;
@@ -334,7 +321,7 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 				instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
 
 				if (!get_unsigned(&mask, *argv, 0)) {
-					instr->mir_instr[c].mir_tc2exp.t2e_mask = mask;
+					instr->instr[c].tc2exp.mask = mask;
 					do {
 						NEXT_ARG();
 						if(strcmp(*argv, "default") == 0){
@@ -355,13 +342,13 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 							int i;
 							for (i=0;i<MPLS_TCINDEX_NUM;i++){
 								if((i & mask) == (tcindex & mask) )
-									instr->mir_instr[c].mir_tc2exp.t2e[i] = exp;
+									instr->instr[c].tc2exp.data[i] = exp;
 							}
 						} else {
 							int i;
 							for (i=0;i<MPLS_TCINDEX_NUM;i++){
-								if(instr->mir_instr[c].mir_nf2exp.n2e[i]==0)
-									instr->mir_instr[c].mir_nf2exp.n2e[i] = exp;
+								if(instr->instr[c].nf2exp.data[i]==0)
+									instr->instr[c].nf2exp.data[i] = exp;
 							}
 						}
 						if(!NEXT_ARG_OK()){
@@ -374,7 +361,7 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 				/*if we didn't reach last argument we will have here 1*/
 				if(done)
 					PREV_ARG();
-				instr->mir_instr[c].mir_opcode = MPLS_OP_TC2EXP;
+				instr->instr[c].opcode = MPLS_OP_TC2EXP;
 				NEXT_ARG(); c++;
 			} else if (strcmp(*argv, "ds2exp") == 0) {
 				int done = 0;
@@ -389,7 +376,7 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 				instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
 
 				if (!get_unsigned(&mask, *argv, 0)) {
-					instr->mir_instr[c].mir_ds2exp.d2e_mask = mask;
+					instr->instr[c].ds2exp.mask = mask;
 					do {
 						NEXT_ARG();
 						if(strcmp(*argv, "default") == 0){
@@ -410,13 +397,13 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 							int i;
 							for (i=0;i<MPLS_DSMARK_NUM;i++){
 								if((i & mask) == (dscp & mask))
-									instr->mir_instr[c].mir_ds2exp.d2e[i] = exp;
+									instr->instr[c].ds2exp.data[i] = exp;
 							}
 						} else {
 							int i;
 							for (i=0;i<MPLS_DSMARK_NUM;i++){
-								if(instr->mir_instr[c].mir_ds2exp.d2e[i]==0)
-									instr->mir_instr[c].mir_ds2exp.d2e[i] = exp;
+								if(instr->instr[c].ds2exp.data[i]==0)
+									instr->instr[c].ds2exp.data[i] = exp;
 							}
 						}
 						if(!NEXT_ARG_OK()){
@@ -429,15 +416,15 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 				/*if we didn't reach last argument we will have here 1*/
 				if(done)
 					PREV_ARG();
-				instr->mir_instr[c].mir_opcode = MPLS_OP_DS2EXP;
+				instr->instr[c].opcode = MPLS_OP_DS2EXP;
 				NEXT_ARG(); c++;
 			}
 			/*make room for new element*/
 			instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
 
-			instr->mir_instr[c].mir_opcode = MPLS_OP_PUSH;
+			instr->instr[c].opcode = MPLS_OP_PUSH;
 			*pargc = argc; *pargv = argv;
-			mpls_parse_label(&instr->mir_instr[c].mir_push,
+			mpls_parse_label(&instr->instr[c].push,
 					pargc, pargv);
 			argc = *pargc; argv = *pargv;
 		} else if (strcmp(*argv, "forward") == 0) {
@@ -448,23 +435,23 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 			/*make room for new element*/
 			instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
 
-			instr->mir_instr[c].mir_fwd.ml_type = MPLS_LABEL_KEY;
-			instr->mir_instr[c].mir_fwd.u.ml_key = key;
-			instr->mir_instr[c].mir_opcode = MPLS_OP_FWD;
+			instr->instr[c].fwd.type = MPLS_LABEL_KEY;
+			instr->instr[c].fwd.key = key;
+			instr->instr[c].opcode = MPLS_OP_FWD;
 		} else if (strcmp(*argv, "pop") == 0) {
 			/*if (direction == MPLS_OUT)
 				invarg(*argv, "invalid NHLFE instruction");*/
 			/*make room for new element*/
 			instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
 
-			instr->mir_instr[c].mir_opcode = MPLS_OP_POP;
+			instr->instr[c].opcode = MPLS_OP_POP;
 		} else if (strcmp(*argv, "peek") == 0) {
 			/*if (direction == MPLS_OUT)
 				invarg(*argv, "invalid NHLFE instruction");*/
 			/*make room for new element*/
 			instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
 
-			instr->mir_instr[c].mir_opcode = MPLS_OP_PEEK;
+			instr->instr[c].opcode = MPLS_OP_PEEK;
 		}  else if (strcmp(*argv, "set-dscp") == 0) {
 			__u32 dscp;
 			/*if (direction == MPLS_OUT)
@@ -475,8 +462,8 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 			/*make room for new element*/
 			instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
 
-			instr->mir_instr[c].mir_opcode = MPLS_OP_SET_DS;
-			instr->mir_instr[c].mir_set_ds = dscp;
+			instr->instr[c].opcode = MPLS_OP_SET_DS;
+			instr->instr[c].set_ds = dscp;
 		} else if (strcmp(*argv, "set-tcindex") == 0) {
 			__u32 tcindex;
 			NEXT_ARG();
@@ -485,8 +472,8 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 			/*make room for new element*/
 			instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
 
-			instr->mir_instr[c].mir_opcode = MPLS_OP_SET_TC;
-			instr->mir_instr[c].mir_set_tc = tcindex;
+			instr->instr[c].opcode = MPLS_OP_SET_TC;
+			instr->instr[c].set_tc = tcindex;
 		} else if (strcmp(*argv, "expfwd") == 0) {
 			int done = 0;
 			unsigned int exp;
@@ -512,12 +499,12 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 					invarg(*argv, "not unsigned int");
 				}
 				if (!got_default){
-					instr->mir_instr[c].mir_exp_fwd.ef_key[exp] = key;
+					instr->instr[c].exp_fwd.key[exp] = key;
 				} else {
 					int i;
 					for (i=0;i<MPLS_EXP_NUM;i++){
-						if(instr->mir_instr[c].mir_exp_fwd.ef_key[i]==0)
-							instr->mir_instr[c].mir_exp_fwd.ef_key[i] = key;
+						if(instr->instr[c].exp_fwd.key[i]==0)
+							instr->instr[c].exp_fwd.key[i] = key;
 					}
 				}
 
@@ -528,7 +515,7 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 			/*if we didn't reach last argument we will have here 1*/
 			if(done)
 				PREV_ARG();
-			instr->mir_instr[c].mir_opcode = MPLS_OP_EXP_FWD;
+			instr->instr[c].opcode = MPLS_OP_EXP_FWD;
 		} else if (strcmp(*argv, "exp2tc") == 0) {
 			int done = 0;
 			unsigned int exp;
@@ -554,12 +541,12 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 					invarg(*argv, "not unsigned int");
 				}
 				if (!got_default){
-					instr->mir_instr[c].mir_exp2tc.e2t[exp] = tcindex;
+					instr->instr[c].exp2tc.data[exp] = tcindex;
 				} else {
 					int i;
 					for (i=0;i<MPLS_EXP_NUM;i++){
-						if(instr->mir_instr[c].mir_exp2tc.e2t[i]==0)
-							instr->mir_instr[c].mir_exp2tc.e2t[i] = tcindex;
+						if(instr->instr[c].exp2tc.data[i]==0)
+							instr->instr[c].exp2tc.data[i] = tcindex;
 					}
 				}
 				if(!NEXT_ARG_OK()){
@@ -569,7 +556,7 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 			/*if we didn't reach last argument we will have here 1*/
 			if(done)
 				PREV_ARG();
-			instr->mir_instr[c].mir_opcode = MPLS_OP_EXP2TC;
+			instr->instr[c].opcode = MPLS_OP_EXP2TC;
 		} else if (strcmp(*argv, "exp2ds") == 0) {
 			int done = 0;
 			unsigned int exp;
@@ -597,12 +584,12 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 					invarg(*argv, "not unsigned int");
 				}
 				if (!got_default){
-					instr->mir_instr[c].mir_exp2ds.e2d[exp] = dscp;
+					instr->instr[c].exp2ds.data[exp] = dscp;
 				} else {
 					int i;
 					for (i=0;i<MPLS_EXP_NUM;i++){
-						if(instr->mir_instr[c].mir_exp2ds.e2d[i]==0)
-							instr->mir_instr[c].mir_exp2ds.e2d[i] = dscp;
+						if(instr->instr[c].exp2ds.data[i]==0)
+							instr->instr[c].exp2ds.data[i] = dscp;
 					}
 				}
 				if(!NEXT_ARG_OK()){
@@ -612,7 +599,7 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 			/*if we didn't reach last argument we will have here 1*/
 			if(done)
 				PREV_ARG();
-			instr->mir_instr[c].mir_opcode = MPLS_OP_EXP2DS;
+			instr->instr[c].opcode = MPLS_OP_EXP2DS;
 		} else if (strcmp(*argv, "nffwd") == 0) {
 			int done = 0;
 			unsigned int nfmark;
@@ -624,7 +611,7 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 			instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
 
 			if (!get_unsigned(&mask, *argv, 0)) {
-				instr->mir_instr[c].mir_nf_fwd.nf_mask = mask;
+				instr->instr[c].nf_fwd.mask = mask;
 				do {
 					NEXT_ARG();
 					if(strcmp(*argv, "default") == 0){
@@ -645,13 +632,13 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 						int i;
 						for (i=0;i<MPLS_NFMARK_NUM;i++){
 							if((i & mask)==(nfmark & mask))
-								instr->mir_instr[c].mir_nf_fwd.nf_key[i] = key;
+								instr->instr[c].nf_fwd.key[i] = key;
 						}
 					} else {
 						int i;
 						for (i=0;i<MPLS_NFMARK_NUM;i++){
-							if(instr->mir_instr[c].mir_nf_fwd.nf_key[i]==0)
-								instr->mir_instr[c].mir_nf_fwd.nf_key[i] = key;
+							if(instr->instr[c].nf_fwd.key[i]==0)
+								instr->instr[c].nf_fwd.key[i] = key;
 						}
 					}
 					if(!NEXT_ARG_OK()){
@@ -664,7 +651,7 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 			/*if we didn't reach last argument we will have here 1*/
 			if(done)
 				PREV_ARG();
-			instr->mir_instr[c].mir_opcode = MPLS_OP_NF_FWD;
+			instr->instr[c].opcode = MPLS_OP_NF_FWD;
 		} else if (strcmp(*argv, "dsfwd") == 0) {
 			int done = 0;
 			unsigned int dscp;
@@ -676,7 +663,7 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 			instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
 
 			if (!get_unsigned(&mask, *argv, 0)) {
-				instr->mir_instr[c].mir_ds_fwd.df_mask = mask;
+				instr->instr[c].ds_fwd.mask = mask;
 				do {
 					NEXT_ARG();
 					if(strcmp(*argv, "default") == 0){
@@ -697,13 +684,13 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 						int i;
 						for (i=0;i<MPLS_DSMARK_NUM;i++){
 							if((i & mask) == (dscp & mask))
-								instr->mir_instr[c].mir_ds_fwd.df_key[dscp] = key;
+								instr->instr[c].ds_fwd.key[dscp] = key;
 						}
 					} else {
 						int i;
 						for (i=0;i<MPLS_DSMARK_NUM;i++){
-							if(instr->mir_instr[c].mir_ds_fwd.df_key[i]==0)
-								instr->mir_instr[c].mir_ds_fwd.df_key[i] = key;
+							if(instr->instr[c].ds_fwd.key[i]==0)
+								instr->instr[c].ds_fwd.key[i] = key;
 						}
 					}
 					if(!NEXT_ARG_OK()){
@@ -716,14 +703,14 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 			/*if we didn't reach last argument we will have here 1*/
 			if(done)
 				PREV_ARG();
-			instr->mir_instr[c].mir_opcode = MPLS_OP_DS_FWD;
+			instr->instr[c].opcode = MPLS_OP_DS_FWD;
 		} else {
 			invarg(*argv, "invalid mpls instruction");
 		}
 		argc--; argv++; c++;
 	}
-	instr->mir_instr_length = c;
-	instr->mir_direction = direction;
+	instr->instr_length = c;
+	instr->direction = direction;
 	*pargc = argc;
 	*pargv = argv;
 }
@@ -756,26 +743,27 @@ mpls_ilm_modify(int cmd, unsigned flags, int argc, char **argv)
 			NEXT_ARG();
 			if (get_unsigned(&ls, *argv, 0))
 				invarg(*argv, "invalid labelspace");
-			mil.mil_label.ml_labelspace = ls;
+			mil.label.labelspace = ls;
 		} else if (strcmp(*argv, "label") == 0) {
 			NEXT_ARG();
-			mpls_parse_label(&mil.mil_label, &argc, &argv);
+			mpls_parse_label(&mil.label, &argc, &argv);
 		} else if (strcmp(*argv, "forward") == 0 || strcmp(*argv, "expfwd") == 0) {
 			mpls_parse_instr(instr, &argc, &argv, MPLS_IN);
-			mil.mil_change_flag |= MPLS_CHANGE_INSTR;
+			mil.change_flag |= MPLS_CHANGE_INSTR;
 		} else {
 			invarg(*argv, "invalid ilm argument");
 		}
 		argc--; argv++;
 	}
 
-	if (!mil.mil_label.ml_type) {
+	if (!mil.label.type) {
 		fprintf(stderr, "you must specify a label value\n");
 		exit(1);
 	}
-	mil.mil_owner = RTPROT_STATIC;
+	mil.owner = RTPROT_STATIC;
 	addattr_l(&req.n, sizeof(req), MPLS_ATTR_ILM, &mil, sizeof(mil));
-	addattr_l(&req.n, sizeof(req), MPLS_ATTR_INSTR, instr, sizeof(*instr)+instr->mir_instr_length*sizeof(struct mpls_instr_elem));
+	addattr_l(&req.n, sizeof(req), MPLS_ATTR_INSTR, instr,
+			sizeof(*instr)+instr->instr_length*sizeof(struct mpls_instr_elem));
 
 	if (rtnl_talk(&rth_ilm, &req.n, 0, 0, &req.n, NULL, NULL) < 0)
 		exit(2);
@@ -812,35 +800,36 @@ mpls_nhlfe_modify(int cmd, unsigned flags, int argc, char **argv)
 			NEXT_ARG();
 			if (get_unsigned(&key, *argv, 0))
 				invarg(*argv, "invalid key");
-			mol.mol_label.u.ml_key = key;
-			mol.mol_label.ml_type = MPLS_LABEL_KEY;
+			mol.label.key = key;
+			mol.label.type = MPLS_LABEL_KEY;
 		} else if (strcmp(*argv, "mtu") == 0) {
 			__u32 mtu;
 			NEXT_ARG();
 			if (get_unsigned(&mtu, *argv, 0))
 				invarg(*argv, "invalid mtu");
-			mol.mol_mtu = mtu;
-			mol.mol_change_flag |= MPLS_CHANGE_MTU;
+			mol.mtu = mtu;
+			mol.change_flag |= MPLS_CHANGE_MTU;
 		} else if (strcmp(*argv, "no_propagate_ttl") == 0) {
-			mol.mol_propagate_ttl = 0;
-			mol.mol_change_flag |= MPLS_CHANGE_PROP_TTL;
+			mol.propagate_ttl = 0;
+			mol.change_flag |= MPLS_CHANGE_PROP_TTL;
 		} else if (strcmp(*argv, "propagate_ttl") == 0) {
-			mol.mol_propagate_ttl = 1;
-			mol.mol_change_flag |= MPLS_CHANGE_PROP_TTL;
+			mol.propagate_ttl = 1;
+			mol.change_flag |= MPLS_CHANGE_PROP_TTL;
 		} else if (strcmp(*argv, "instructions") == 0) {
 			NEXT_ARG();
 			instr = (struct mpls_instr_req*)malloc(sizeof(struct mpls_instr_req));
 			mpls_parse_instr(instr, &argc, &argv, MPLS_OUT);
-			mol.mol_change_flag |= MPLS_CHANGE_INSTR;
+			mol.change_flag |= MPLS_CHANGE_INSTR;
 		} else {
 			usage();
 		}
 		argc--; argv++;
 	}
-	mol.mol_owner = RTPROT_STATIC;
+	mol.owner = RTPROT_STATIC;
 	addattr_l(&req.n, sizeof(req), MPLS_ATTR_NHLFE, &mol, sizeof(mol));
 	if(instr)
-		addattr_l(&req.n, sizeof(req), MPLS_ATTR_INSTR, instr, sizeof(*instr)+instr->mir_instr_length*sizeof(struct mpls_instr_elem));
+		addattr_l(&req.n, sizeof(req), MPLS_ATTR_INSTR, instr,
+				sizeof(*instr)+instr->instr_length*sizeof(struct mpls_instr_elem));
 
 	if (rtnl_talk(&rth_nhlfe, &req.n, 0, 0, &req.n, NULL, NULL) < 0)
 		exit(2);
@@ -878,29 +867,29 @@ mpls_xc_modify(int cmd, unsigned flags, int argc, char **argv)
 			NEXT_ARG();
 			if (get_unsigned(&ls, *argv, 0) || ls > 255)
 				invarg(*argv, "invalid labelspace");
-			xc.mx_in.ml_labelspace = ls;
+			xc.in.labelspace = ls;
 		} else if (strcmp(*argv, "ilm_label") == 0) {
 			NEXT_ARG();
-			mpls_parse_label(&xc.mx_in, &argc, &argv);
+			mpls_parse_label(&xc.in, &argc, &argv);
 		} else if (strcmp(*argv, "nhlfe_key") == 0) {
 			__u32 key;
 			NEXT_ARG();
 			if (get_unsigned(&key, *argv, 0))
 				invarg(*argv, "invalid key");
-			xc.mx_out.u.ml_key = key;
-			xc.mx_out.ml_type = MPLS_LABEL_KEY;
+			xc.out.key = key;
+			xc.out.type = MPLS_LABEL_KEY;
 		} else {
 			usage();
 		}
 		argc--; argv++;
 	}
 
-	if (!xc.mx_in.ml_type) {
+	if (!xc.in.type) {
 		fprintf(stderr, "you must specify a ILM label value\n");
 		exit(1);
 	}
 
-	if (!xc.mx_out.u.ml_key && cmd!=MPLS_CMD_GETXC ) {
+	if (!xc.out.key && cmd!=MPLS_CMD_GETXC ) {
 		fprintf(stderr, "you must specify a NHLFE key\n");
 		exit(1);
 	}
@@ -936,7 +925,7 @@ mpls_labelspace_modify(int cmd, unsigned flags, int argc, char **argv)
 	ghdr = NLMSG_DATA(&req.n);
 	ghdr->cmd = cmd;
 
-	ls.mls_ifindex = ll_name_to_index(*argv);
+	ls.ifindex = ll_name_to_index(*argv);
 
 	if(NEXT_ARG_OK()) {
 		NEXT_ARG();
@@ -947,9 +936,9 @@ mpls_labelspace_modify(int cmd, unsigned flags, int argc, char **argv)
 	else
 		labelspace = 0;
 
-	ls.mls_labelspace = labelspace;
+	ls.labelspace = labelspace;
 
-	if (ls.mls_ifindex == 0 || ls.mls_labelspace < -1) {
+	if (ls.ifindex == 0 || ls.labelspace < -1) {
 		fprintf(stderr, "Invalid arguments\n");
 		exit(1);
 	}
@@ -982,12 +971,12 @@ mpls_tunnel_modify(int cmd, int argc, char **argv)
 		if ((cmd == SIOCDELTUNNEL || cmd == SIOCGETTUNNEL || cmd == SIOCCHGTUNNEL) && strcmp(*argv, "dev") == 0) {
 			NEXT_ARG();
 
-			strncpy(mtr.mt_ifname, *argv, IFNAMSIZ);
+			strncpy(mtr.ifname, *argv, IFNAMSIZ);
 		} else if ((cmd == SIOCADDTUNNEL || cmd == SIOCCHGTUNNEL) && strcmp(*argv, "nhlfe") == 0) {
 			NEXT_ARG();
 			if (get_unsigned(&key, *argv, 0))
 				invarg(*argv, "invalid NHLFE key");
-			mtr.mt_nhlfe_key = key;
+			mtr.nhlfe_key = key;
 		} else {
 			usage();
 		}
@@ -1039,22 +1028,15 @@ void print_address(FILE *fp, struct sockaddr *addr) {
 }
 
 void print_label(FILE *fp, struct mpls_label *label) {
-	switch (label->ml_type) {
+	switch (label->type) {
 	case MPLS_LABEL_GEN:
-		fprintf(fp, "gen %d ", label->u.ml_gen);
-		break;
-	case MPLS_LABEL_ATM:
-		fprintf(fp, "atm %d/%d ", label->u.ml_atm.mla_vpi,
-				label->u.ml_atm.mla_vci);
-		break;
-	case MPLS_LABEL_FR:
-		fprintf(fp, "fr %d ", label->u.ml_fr);
+		fprintf(fp, "gen %d ", label->gen);
 		break;
 	case MPLS_LABEL_KEY:
-		fprintf(fp, "key 0x%08x ", label->u.ml_key);
+		fprintf(fp, "key 0x%08x ", label->key);
 		break;
 	default:
-		fprintf(fp, "<unknown label type %d> ", label->ml_type);
+		fprintf(fp, "<unknown label type %d> ", label->type);
 	}
 }
 
@@ -1094,10 +1076,10 @@ void print_instructions(FILE *fp, struct mpls_instr_req *instr)
 	int repeating_value = -1;
 
 
-	for(i = 0;i < instr->mir_instr_length;i++) {
-		ci = &instr->mir_instr[i];
+	for(i = 0;i < instr->instr_length;i++) {
+		ci = &instr->instr[i];
 
-		switch (ci->mir_opcode) {
+		switch (ci->opcode) {
 		case MPLS_OP_DROP:
 			fprintf(fp, "drop ");
 			break;
@@ -1109,40 +1091,40 @@ void print_instructions(FILE *fp, struct mpls_instr_req *instr)
 			break;
 		case MPLS_OP_PUSH:
 			fprintf(fp, "push ");
-			print_label(fp, &ci->mir_push);
+			print_label(fp, &ci->push);
 			break;
 		case MPLS_OP_FWD:
 			fprintf(fp, "forward ");
-			print_label(fp, &ci->mir_fwd);
+			print_label(fp, &ci->fwd);
 			break;
 		case MPLS_OP_SET:
 			fprintf(fp, "set %s ",
-					ll_index_to_name(ci->mir_set.mni_if));
-			print_address(fp, &ci->mir_set.mni_addr);
+					ll_index_to_name(ci->set.iface));
+			print_address(fp, &ci->set.addr);
 			break;
 		case MPLS_OP_SET_TC:
-			fprintf(fp, "set-tcindex %hu ",ci->mir_set_tc);
+			fprintf(fp, "set-tcindex %hu ",ci->set_tc);
 			break;
 		case MPLS_OP_SET_DS:
-			fprintf(fp, "set-dscp %hu ",ci->mir_set_ds);
+			fprintf(fp, "set-dscp %hu ",ci->set_ds);
 			break;
 		case MPLS_OP_SET_EXP:
-			fprintf(fp, "set-exp %hhu ",ci->mir_set_exp);
+			fprintf(fp, "set-exp %hhu ",ci->set_exp);
 			break;
 		case MPLS_OP_NF_FWD:
 			fprintf(fp, "nffwd mask->0x%2.2hhx ",
-					ci->mir_nf_fwd.nf_mask);
+					ci->nf_fwd.mask);
 			for(j=0;j<MPLS_NFMARK_NUM;j++) {
-				key = ci->mir_nf_fwd.nf_key[j];
+				key = ci->nf_fwd.key[j];
 				mpls_smart_print_key(fp, key,j,&first,&last,&repeating_value,MPLS_NFMARK_NUM);
 			}
 			fprintf(fp,"\n\t");
 			break;
 		case MPLS_OP_DS_FWD:
 			fprintf(fp, "dsfwd mask->0x%2.2hhx ",
-					ci->mir_ds_fwd.df_mask);
+					ci->ds_fwd.mask);
 			for(j=0;j<MPLS_DSMARK_NUM;j++) {
-				key = ci->mir_ds_fwd.df_key[j];
+				key = ci->ds_fwd.key[j];
 				mpls_smart_print_key(fp, key,j,&first,&last,&repeating_value,MPLS_DSMARK_NUM);
 			}
 			fprintf(fp,"\n\t");
@@ -1150,7 +1132,7 @@ void print_instructions(FILE *fp, struct mpls_instr_req *instr)
 		case MPLS_OP_EXP_FWD:
 			fprintf(fp, "exp-fwd ");
 			for(j=0;j<MPLS_EXP_NUM;j++) {
-				key = ci->mir_exp_fwd.ef_key[j];
+				key = ci->exp_fwd.key[j];
 				mpls_smart_print_key(fp, key,j,&first,&last,&repeating_value,MPLS_EXP_NUM);
 			}
 			fprintf(fp,"\n\t");
@@ -1158,7 +1140,7 @@ void print_instructions(FILE *fp, struct mpls_instr_req *instr)
 		case MPLS_OP_EXP2TC:
 			fprintf(fp, "exp2tc ");
 			for(j=0;j<MPLS_EXP_NUM;j++) {
-				key = ci->mir_exp2tc.e2t[j];
+				key = ci->exp2tc.data[j];
 				mpls_smart_print_key(fp, key,j,&first,&last,&repeating_value,MPLS_EXP_NUM);
 			}
 			fprintf(fp,"\n\t");
@@ -1166,41 +1148,41 @@ void print_instructions(FILE *fp, struct mpls_instr_req *instr)
 		case MPLS_OP_EXP2DS:
 			fprintf(fp, "exp2ds ");
 			for(j=0;j<MPLS_EXP_NUM;j++) {
-				key = ci->mir_exp2ds.e2d[j];
+				key = ci->exp2ds.data[j];
 				mpls_smart_print_key(fp, key,j,&first,&last,&repeating_value,MPLS_EXP_NUM);
 			}
 			fprintf(fp,"\n\t");
 			break;
 		case MPLS_OP_TC2EXP:
 			fprintf(fp, "tc2exp mask->0x%2.2hhx ",
-					ci->mir_tc2exp.t2e_mask);
+					ci->tc2exp.mask);
 			for(j=0;j<MPLS_TCINDEX_NUM;j++) {
-				key = ci->mir_tc2exp.t2e[j];
+				key = ci->tc2exp.data[j];
 				mpls_smart_print_key(fp, key,j,&first,&last,&repeating_value,MPLS_TCINDEX_NUM);
 			}
 			fprintf(fp,"\n\t");
 			break;
 		case MPLS_OP_DS2EXP:
 			fprintf(fp, "ds2exp mask->0x%2.2hhx ",
-					ci->mir_ds2exp.d2e_mask);
+					ci->ds2exp.mask);
 			for(j=0;j<MPLS_DSMARK_NUM;j++) {
-				key = ci->mir_ds2exp.d2e[j];
+				key = ci->ds2exp.data[j];
 				mpls_smart_print_key(fp, key,j,&first,&last,&repeating_value,MPLS_DSMARK_NUM);
 			}
 			fprintf(fp,"\n\t");
 			break;
 		case MPLS_OP_NF2EXP:
 			fprintf(fp, "nf2exp mask->0x%2.2hhx ",
-					ci->mir_nf2exp.n2e_mask);
+					ci->nf2exp.mask);
 			for(j=0;j<MPLS_NFMARK_NUM;j++) {
-				key = ci->mir_nf2exp.n2e[j];
+				key = ci->nf2exp.data[j];
 				mpls_smart_print_key(fp, key,j,&first,&last,&repeating_value,MPLS_NFMARK_NUM);
 			}
 			fprintf(fp,"\n\t");
 			break;
 		default:
 			fprintf(fp, "<unknown opcode %d> ",
-					ci->mir_opcode);
+					ci->opcode);
 		}
 	}
 }
@@ -1221,13 +1203,13 @@ int print_ilm(int cmd, const struct nlmsghdr *n, void *arg, struct rtattr **tb)
 	instr = RTA_DATA(tb[MPLS_ATTR_INSTR]);
 
 	fprintf(fp, "label ");
-	print_label(fp, &mil->mil_label);
+	print_label(fp, &mil->label);
 
-	fprintf(fp, "labelspace %d ", mil->mil_label.ml_labelspace);
+	fprintf(fp, "labelspace %d ", mil->label.labelspace);
 
-	fprintf (fp,"proto %s ", lookup_proto(mil->mil_owner));
+	fprintf (fp,"proto %s ", lookup_proto(mil->owner));
 	fprintf(fp, "\n\t");
-	if (instr && instr->mir_instr_length) {
+	if (instr && instr->instr_length) {
 		print_instructions(fp, instr);
 	}
 
@@ -1250,9 +1232,9 @@ int print_xc(int cmd, const struct nlmsghdr *n, void *arg, struct rtattr **tb)
 		fprintf(fp, "XC entry ");
 
 	fprintf(fp, "ilm_label ");
-	print_label(fp, &xc->mx_in);
-	fprintf(fp, "ilm_labelspace %d ", xc->mx_in.ml_labelspace);
-	fprintf(fp, "nhlfe_key 0x%08x ",xc->mx_out.u.ml_key);
+	print_label(fp, &xc->in);
+	fprintf(fp, "ilm_labelspace %d ", xc->in.labelspace);
+	fprintf(fp, "nhlfe_key 0x%08x ",xc->out.key);
 	fprintf(fp, "\n");
 	fflush(fp);
 	return 0;
@@ -1267,8 +1249,8 @@ int print_labelspace(int cmd, const struct nlmsghdr *n, void *arg, struct rtattr
 
 	fprintf(fp, "LABELSPACE entry ");
 
-	fprintf(fp, "dev %s ", ll_index_to_name(ls->mls_ifindex));
-	fprintf(fp, "labelspace %d ",ls->mls_labelspace);
+	fprintf(fp, "dev %s ", ll_index_to_name(ls->ifindex));
+	fprintf(fp, "labelspace %d ",ls->labelspace);
 	fprintf(fp, "\n");
 	fflush(fp);
 
@@ -1290,14 +1272,14 @@ int print_nhlfe(int cmd, const struct nlmsghdr *n, void *arg, struct rtattr **tb
 	if (cmd == MPLS_CMD_NEWNHLFE)
 		fprintf(fp, "NHLFE entry ");
 
-	fprintf(fp, "key 0x%08x ", mol->mol_label.u.ml_key);
-	fprintf(fp, "mtu %d ",mol->mol_mtu);
-	if (mol->mol_propagate_ttl) {
+	fprintf(fp, "key 0x%08x ", mol->label.key);
+	fprintf(fp, "mtu %d ",mol->mtu);
+	if (mol->propagate_ttl) {
 		fprintf(fp, "propagate_ttl ");
 	}
-	fprintf(fp,"proto %s ", lookup_proto(mol->mol_owner));
+	fprintf(fp,"proto %s ", lookup_proto(mol->owner));
 	fprintf(fp, "\n\t");
-	if (instr && instr->mir_instr_length) {
+	if (instr && instr->instr_length) {
 		print_instructions(fp, instr);
 	}
 
@@ -1324,9 +1306,9 @@ int print_tunnel(int cmd, const struct mpls_tunnel_req *mtr, void *arg)
 		fprintf(fp,"->");
 		break;
 	}
-	fprintf(fp, "%s ", mtr->mt_ifname);
+	fprintf(fp, "%s ", mtr->ifname);
 	if (cmd != SIOCDELTUNNEL)
-		fprintf(fp, "0x%08x", mtr->mt_nhlfe_key);
+		fprintf(fp, "0x%08x", mtr->nhlfe_key);
 	fprintf(fp, "\n");
 
 	fflush(fp);
