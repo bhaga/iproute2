@@ -92,29 +92,16 @@ enum mpls_opcode_enum {
 	MPLS_OP_MAX
 };
 
-enum mpls_label_type_enum {
-	MPLS_LABEL_GEN = 1,
-	MPLS_LABEL_KEY
-};
-
 #define MPLS_HDR_LEN  4
 
-struct mpls_label {
-	enum mpls_label_type_enum type;
-	union {
-		__u32 key;
-		__u32 gen;
-	};
-	int labelspace;
-};
-
 struct mpls_in_label_req {
-	struct mpls_label label;
+	__u32 label;
 	__u8 change_flag;
 	__u8 owner;   /* Routing protocol */
 };
 
-#define MPLS_LABELSPACE_MAX	255
+/*2^10*/
+#define MPLS_LABELSPACE_MAX (1 << 10)
 
 struct mpls_labelspace_req {
 	int ifindex;                  /* Index to the MPLS-enab. interface*/
@@ -131,7 +118,7 @@ struct mpls_nexthop_info {
 };
 
 struct mpls_out_label_req {
-	struct mpls_label label;
+	__u32 label;
 	__u32 mtu;
 	__u8 propagate_ttl;
 	__u8 change_flag;
@@ -139,8 +126,8 @@ struct mpls_out_label_req {
 };
 
 struct mpls_xconnect_req {
-	struct mpls_label in;
-	struct mpls_label out;
+	__u32 in;
+	__u32 out;
 	__u8 owner;        /* Routing protocol */
 };
 
@@ -203,8 +190,8 @@ struct mpls_instr_elem {
 	__u16 opcode;
 	__u8 direction;
 	union {
-		struct mpls_label push;
-		struct mpls_label fwd;
+		__u32 push;
+		__u32 fwd;
 		struct mpls_nfmark_fwd nf_fwd;
 		struct mpls_dsmark_fwd ds_fwd;
 		struct mpls_exp_fwd exp_fwd;
@@ -257,5 +244,15 @@ enum {
 };
 
 #define MPLS_ATTR_MAX (__MPLS_ATTR_MAX - 1)
+
+#define key_ls(key)																			\
+	(((__u32)(key) & ((__u32)(0xfff) << 20)) >> 20)
+#define key_label(key)																		\
+	((__u32)(key) & ((__u32)(0xfffff)))
+
+#define set_key_ls(key, ls)																	\
+	(key) = (__u32)(((__u32)(key) & ~((__u32)(0xfff) << 20)) | (((ls) & (__u32)(0xfff)) << 20))
+#define set_key_label(key, label)															\
+	(key) = (__u32)(((__u32)(key) & ~((__u32)(0xfffff))) | ((label) & (__u32)(0xfffff)))
 
 #endif

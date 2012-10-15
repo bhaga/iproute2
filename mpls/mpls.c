@@ -86,9 +86,7 @@ static void usage(void)
 	fprintf(stderr, "Where:\n");
 	fprintf(stderr, "CMD    := add | del | change\n");
 	fprintf(stderr, "NUMBER := 0 .. 255\n");
-	fprintf(stderr, "TYPE   := gen\n");
-	fprintf(stderr, "VALUE  := 16 .. 1048575\n");
-	fprintf(stderr, "LABEL  := TYPE VALUE\n");
+	fprintf(stderr, "LABEL  := 16 .. 1048575\n");
 	fprintf(stderr, "KEY    := any unsigned int, except 0\n");
 	fprintf(stderr, "NAME   := network device name (i.e. eth0)\n");
 	fprintf(stderr, "ADDR   := ipv6 or ipv4 address\n");
@@ -168,31 +166,19 @@ int mpls_table_list(int argc, char **argv)
 	return 0;
 }
 
-void mpls_parse_label (struct mpls_label *label, int *pargc, char ***pargv) {
+void mpls_parse_label (__u32 *label, int *pargc, char ***pargv) {
 	unsigned int l1;
 	char *value;
 	int argc = *pargc;
 	char **argv = *pargv;
 
-	if (strncmp(*argv, "gen", 3) == 0) {
-		label->type = MPLS_LABEL_GEN;
-	} else {
-		invarg(*argv, "invalid mpls label type");
-	}
-
-	NEXT_ARG();
 	value = *argv;
 
-	switch (label->type) {
-	case MPLS_LABEL_GEN:
-		if (get_unsigned(&l1, value, 0) || l1 > 1048575)
-			invarg(value, "invalid label value");
-		label->gen = l1;
-		break;
-	default:
-		fprintf(stderr, "Invalid label type!\n");
-		exit(-1);
-	}
+	if (get_unsigned(&l1, value, 0) || l1 > 1048575)
+		invarg(value, "invalid label value");
+
+	set_key_label(*label, l1);
+
 	*pargc = argc;
 	*pargv = argv;
 }
@@ -435,8 +421,7 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 			/*make room for new element*/
 			instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
 
-			instr->instr[c].fwd.type = MPLS_LABEL_KEY;
-			instr->instr[c].fwd.key = key;
+			instr->instr[c].fwd = key;
 			instr->instr[c].opcode = MPLS_OP_FWD;
 		} else if (strcmp(*argv, "pop") == 0) {
 			/*if (direction == MPLS_OUT)
@@ -743,7 +728,7 @@ mpls_ilm_modify(int cmd, unsigned flags, int argc, char **argv)
 			NEXT_ARG();
 			if (get_unsigned(&ls, *argv, 0))
 				invarg(*argv, "invalid labelspace");
-			mil.label.labelspace = ls;
+			set_key_ls(mil.label, ls);
 		} else if (strcmp(*argv, "label") == 0) {
 			NEXT_ARG();
 			mpls_parse_label(&mil.label, &argc, &argv);
@@ -756,10 +741,6 @@ mpls_ilm_modify(int cmd, unsigned flags, int argc, char **argv)
 		argc--; argv++;
 	}
 
-	if (!mil.label.type) {
-		fprintf(stderr, "you must specify a label value\n");
-		exit(1);
-	}
 	mil.owner = RTPROT_STATIC;
 	addattr_l(&req.n, sizeof(req), MPLS_ATTR_ILM, &mil, sizeof(mil));
 	addattr_l(&req.n, sizeof(req), MPLS_ATTR_INSTR, instr,
@@ -800,8 +781,7 @@ mpls_nhlfe_modify(int cmd, unsigned flags, int argc, char **argv)
 			NEXT_ARG();
 			if (get_unsigned(&key, *argv, 0))
 				invarg(*argv, "invalid key");
-			mol.label.key = key;
-			mol.label.type = MPLS_LABEL_KEY;
+			mol.label = key;
 		} else if (strcmp(*argv, "mtu") == 0) {
 			__u32 mtu;
 			NEXT_ARG();
@@ -867,7 +847,7 @@ mpls_xc_modify(int cmd, unsigned flags, int argc, char **argv)
 			NEXT_ARG();
 			if (get_unsigned(&ls, *argv, 0) || ls > 255)
 				invarg(*argv, "invalid labelspace");
-			xc.in.labelspace = ls;
+			set_key_ls(xc.in, ls);
 		} else if (strcmp(*argv, "ilm_label") == 0) {
 			NEXT_ARG();
 			mpls_parse_label(&xc.in, &argc, &argv);
@@ -876,20 +856,14 @@ mpls_xc_modify(int cmd, unsigned flags, int argc, char **argv)
 			NEXT_ARG();
 			if (get_unsigned(&key, *argv, 0))
 				invarg(*argv, "invalid key");
-			xc.out.key = key;
-			xc.out.type = MPLS_LABEL_KEY;
+			xc.out = key;
 		} else {
 			usage();
 		}
 		argc--; argv++;
 	}
 
-	if (!xc.in.type) {
-		fprintf(stderr, "you must specify a ILM label value\n");
-		exit(1);
-	}
-
-	if (!xc.out.key && cmd!=MPLS_CMD_GETXC ) {
+	if (!xc.out && cmd!=MPLS_CMD_GETXC ) {
 		fprintf(stderr, "you must specify a NHLFE key\n");
 		exit(1);
 	}
@@ -1027,17 +1001,12 @@ void print_address(FILE *fp, struct sockaddr *addr) {
 	}
 }
 
-void print_label(FILE *fp, struct mpls_label *label) {
-	switch (label->type) {
-	case MPLS_LABEL_GEN:
-		fprintf(fp, "gen %d ", label->gen);
-		break;
-	case MPLS_LABEL_KEY:
-		fprintf(fp, "key 0x%08x ", label->key);
-		break;
-	default:
-		fprintf(fp, "<unknown label type %d> ", label->type);
-	}
+inline void print_label(FILE *fp, __u32 *label) {
+	fprintf(fp, "ls %d label %u ", key_ls(*label), key_label(*label));
+}
+
+inline void print_key(FILE *fp, __u32 *key) {
+	fprintf(fp, "key %u ", *key);
 }
 
 void mpls_smart_print_key(FILE *fp, unsigned int key, int index, int *first,int *last, int *repeating_value,int array_length){
@@ -1091,11 +1060,11 @@ void print_instructions(FILE *fp, struct mpls_instr_req *instr)
 			break;
 		case MPLS_OP_PUSH:
 			fprintf(fp, "push ");
-			print_label(fp, &ci->push);
+			fprintf(fp, "label %u ", key_label(ci->push));
 			break;
 		case MPLS_OP_FWD:
 			fprintf(fp, "forward ");
-			print_label(fp, &ci->fwd);
+			print_key(fp, &ci->fwd);
 			break;
 		case MPLS_OP_SET:
 			fprintf(fp, "set %s ",
@@ -1205,8 +1174,6 @@ int print_ilm(int cmd, const struct nlmsghdr *n, void *arg, struct rtattr **tb)
 	fprintf(fp, "label ");
 	print_label(fp, &mil->label);
 
-	fprintf(fp, "labelspace %d ", mil->label.labelspace);
-
 	fprintf (fp,"proto %s ", lookup_proto(mil->owner));
 	fprintf(fp, "\n\t");
 	if (instr && instr->instr_length) {
@@ -1233,8 +1200,7 @@ int print_xc(int cmd, const struct nlmsghdr *n, void *arg, struct rtattr **tb)
 
 	fprintf(fp, "ilm_label ");
 	print_label(fp, &xc->in);
-	fprintf(fp, "ilm_labelspace %d ", xc->in.labelspace);
-	fprintf(fp, "nhlfe_key 0x%08x ",xc->out.key);
+	fprintf(fp, "nhlfe_key 0x%08x ",xc->out);
 	fprintf(fp, "\n");
 	fflush(fp);
 	return 0;
@@ -1272,7 +1238,7 @@ int print_nhlfe(int cmd, const struct nlmsghdr *n, void *arg, struct rtattr **tb
 	if (cmd == MPLS_CMD_NEWNHLFE)
 		fprintf(fp, "NHLFE entry ");
 
-	fprintf(fp, "key 0x%08x ", mol->label.key);
+	fprintf(fp, "key 0x%08x ", mol->label);
 	fprintf(fp, "mtu %d ",mol->mtu);
 	if (mol->propagate_ttl) {
 		fprintf(fp, "propagate_ttl ");
