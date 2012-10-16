@@ -91,10 +91,7 @@ static void usage(void)
 	fprintf(stderr, "NAME   := network device name (i.e. eth0)\n");
 	fprintf(stderr, "ADDR   := ipv6 or ipv4 address\n");
 	fprintf(stderr, "NH     := nexthop NAME [none|packet|ADDR]\n");
-	fprintf(stderr, "FWD    := forward KEY | \n");
-	fprintf(stderr, "	  expfwd EXP - KEY ... [default - KEY]\n");
-	//fprintf(stderr, "	  nffwd MASK  NFMARK - KEY ... [default - KEY] |\n");
-	//fprintf(stderr, "	  dsfwd MASK  DSCP - KEY ... [default - KEY] \n");
+	fprintf(stderr, "FWD    := forward KEY \n");
 	fprintf(stderr, "SET_EXP:= set-exp EXP | \n");
 	fprintf(stderr, "	  nf2exp MASK  NFMARK - EXP ... [default - EXP] |\n");
 	fprintf(stderr, "	  tc2exp MASK  TCINDEX - EXP ... [default - EXP] |\n");
@@ -166,11 +163,9 @@ int mpls_table_list(int argc, char **argv)
 	return 0;
 }
 
-void mpls_parse_label (__u32 *label, int *pargc, char ***pargv) {
+void mpls_parse_label(__u32 *label, char **argv) {
 	unsigned int l1;
 	char *value;
-	int argc = *pargc;
-	char **argv = *pargv;
 
 	value = *argv;
 
@@ -178,9 +173,6 @@ void mpls_parse_label (__u32 *label, int *pargc, char ***pargv) {
 		invarg(value, "invalid label value");
 
 	set_key_label(*label, l1);
-
-	*pargc = argc;
-	*pargv = argv;
 }
 
 void
@@ -409,10 +401,8 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 			instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
 
 			instr->instr[c].opcode = MPLS_OP_PUSH;
-			*pargc = argc; *pargv = argv;
-			mpls_parse_label(&instr->instr[c].push,
-					pargc, pargv);
-			argc = *pargc; argv = *pargv;
+
+			mpls_parse_label(&instr->instr[c].push, argv);
 		} else if (strcmp(*argv, "forward") == 0) {
 			__u32 key;
 			NEXT_ARG();
@@ -459,48 +449,6 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 
 			instr->instr[c].opcode = MPLS_OP_SET_TC;
 			instr->instr[c].set_tc = tcindex;
-		} else if (strcmp(*argv, "expfwd") == 0) {
-			int done = 0;
-			unsigned int exp;
-			unsigned int key;
-			int got_default = 0;
-			/*make room for new element*/
-			instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
-
-			do {
-				NEXT_ARG();
-				if(strcmp(*argv, "default") == 0){
-					got_default=1;
-				} else if (get_unsigned(&exp, *argv, 0)) {
-					done = 1;
-					break;
-				}
-				NEXT_ARG();
-				if (strcmp(*argv, "-") != 0){
-					invarg(*argv, "expected '-' between exp and key");
-				}
-				NEXT_ARG();
-				if (get_unsigned(&key, *argv, 0)) {
-					invarg(*argv, "not unsigned int");
-				}
-				if (!got_default){
-					instr->instr[c].exp_fwd.key[exp] = key;
-				} else {
-					int i;
-					for (i=0;i<MPLS_EXP_NUM;i++){
-						if(instr->instr[c].exp_fwd.key[i]==0)
-							instr->instr[c].exp_fwd.key[i] = key;
-					}
-				}
-
-				if(!NEXT_ARG_OK()){
-					break;
-				}
-			} while (!done && !got_default);
-			/*if we didn't reach last argument we will have here 1*/
-			if(done)
-				PREV_ARG();
-			instr->instr[c].opcode = MPLS_OP_EXP_FWD;
 		} else if (strcmp(*argv, "exp2tc") == 0) {
 			int done = 0;
 			unsigned int exp;
@@ -585,110 +533,6 @@ mpls_parse_instr(struct mpls_instr_req *instr, int *pargc, char ***pargv,
 			if(done)
 				PREV_ARG();
 			instr->instr[c].opcode = MPLS_OP_EXP2DS;
-		} else if (strcmp(*argv, "nffwd") == 0) {
-			int done = 0;
-			unsigned int nfmark;
-			unsigned int key;
-			int got_default = 0;
-			unsigned int mask;
-			NEXT_ARG();
-			/*make room for new element*/
-			instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
-
-			if (!get_unsigned(&mask, *argv, 0)) {
-				instr->instr[c].nf_fwd.mask = mask;
-				do {
-					NEXT_ARG();
-					if(strcmp(*argv, "default") == 0){
-						got_default=1;
-					} else if (get_unsigned(&nfmark, *argv, 0)) {
-						done = 1;
-						break;
-					}
-					NEXT_ARG();
-					if (strcmp(*argv, "-") != 0){
-						invarg(*argv, "expected '-' between nfmark and key");
-					}
-					NEXT_ARG();
-					if (get_unsigned(&key, *argv, 0)) {
-						invarg(*argv, "not unsigned int");
-					}
-					if (!got_default){
-						int i;
-						for (i=0;i<MPLS_NFMARK_NUM;i++){
-							if((i & mask)==(nfmark & mask))
-								instr->instr[c].nf_fwd.key[i] = key;
-						}
-					} else {
-						int i;
-						for (i=0;i<MPLS_NFMARK_NUM;i++){
-							if(instr->instr[c].nf_fwd.key[i]==0)
-								instr->instr[c].nf_fwd.key[i] = key;
-						}
-					}
-					if(!NEXT_ARG_OK()){
-						break;
-					}
-				} while (!done && !got_default);
-			} else {
-				invarg(*argv, "not unsigned int");
-			}
-			/*if we didn't reach last argument we will have here 1*/
-			if(done)
-				PREV_ARG();
-			instr->instr[c].opcode = MPLS_OP_NF_FWD;
-		} else if (strcmp(*argv, "dsfwd") == 0) {
-			int done = 0;
-			unsigned int dscp;
-			unsigned int key;
-			unsigned int mask;
-			int got_default = 0;
-			NEXT_ARG();
-			/*make room for new element*/
-			instr=(struct mpls_instr_req*)realloc(instr,sizeof(*instr)+(c+1)*sizeof(struct mpls_instr_elem));
-
-			if (!get_unsigned(&mask, *argv, 0)) {
-				instr->instr[c].ds_fwd.mask = mask;
-				do {
-					NEXT_ARG();
-					if(strcmp(*argv, "default") == 0){
-						got_default=1;
-					} else if (get_unsigned(&dscp, *argv, 0)) {
-						done = 1;
-						break;
-					}
-					NEXT_ARG();
-					if (strcmp(*argv, "-") != 0){
-						invarg(*argv, "expected '-' between dscp and key");
-					}
-					NEXT_ARG();
-					if (get_unsigned(&key, *argv, 0)) {
-						invarg(*argv, "not unsigned int");
-					}
-					if (!got_default){
-						int i;
-						for (i=0;i<MPLS_DSMARK_NUM;i++){
-							if((i & mask) == (dscp & mask))
-								instr->instr[c].ds_fwd.key[dscp] = key;
-						}
-					} else {
-						int i;
-						for (i=0;i<MPLS_DSMARK_NUM;i++){
-							if(instr->instr[c].ds_fwd.key[i]==0)
-								instr->instr[c].ds_fwd.key[i] = key;
-						}
-					}
-					if(!NEXT_ARG_OK()){
-						break;
-					}
-				} while (!done && !got_default);
-			} else {
-				invarg(*argv, "not unsigned int");
-			}
-			/*if we didn't reach last argument we will have here 1*/
-			if(done)
-				PREV_ARG();
-			instr->instr[c].opcode = MPLS_OP_DS_FWD;
 		} else {
 			invarg(*argv, "invalid mpls instruction");
 		}
@@ -731,8 +575,8 @@ mpls_ilm_modify(int cmd, unsigned flags, int argc, char **argv)
 			set_key_ls(mil.label, ls);
 		} else if (strcmp(*argv, "label") == 0) {
 			NEXT_ARG();
-			mpls_parse_label(&mil.label, &argc, &argv);
-		} else if (strcmp(*argv, "forward") == 0 || strcmp(*argv, "expfwd") == 0) {
+			mpls_parse_label(&mil.label, argv);
+		} else if (strcmp(*argv, "forward") == 0) {
 			mpls_parse_instr(instr, &argc, &argv, MPLS_IN);
 			mil.change_flag |= MPLS_CHANGE_INSTR;
 		} else {
@@ -850,7 +694,7 @@ mpls_xc_modify(int cmd, unsigned flags, int argc, char **argv)
 			set_key_ls(xc.in, ls);
 		} else if (strcmp(*argv, "ilm_label") == 0) {
 			NEXT_ARG();
-			mpls_parse_label(&xc.in, &argc, &argv);
+			mpls_parse_label(&xc.in, argv);
 		} else if (strcmp(*argv, "nhlfe_key") == 0) {
 			__u32 key;
 			NEXT_ARG();
@@ -1079,32 +923,6 @@ void print_instructions(FILE *fp, struct mpls_instr_req *instr)
 			break;
 		case MPLS_OP_SET_EXP:
 			fprintf(fp, "set-exp %hhu ",ci->set_exp);
-			break;
-		case MPLS_OP_NF_FWD:
-			fprintf(fp, "nffwd mask->0x%2.2hhx ",
-					ci->nf_fwd.mask);
-			for(j=0;j<MPLS_NFMARK_NUM;j++) {
-				key = ci->nf_fwd.key[j];
-				mpls_smart_print_key(fp, key,j,&first,&last,&repeating_value,MPLS_NFMARK_NUM);
-			}
-			fprintf(fp,"\n\t");
-			break;
-		case MPLS_OP_DS_FWD:
-			fprintf(fp, "dsfwd mask->0x%2.2hhx ",
-					ci->ds_fwd.mask);
-			for(j=0;j<MPLS_DSMARK_NUM;j++) {
-				key = ci->ds_fwd.key[j];
-				mpls_smart_print_key(fp, key,j,&first,&last,&repeating_value,MPLS_DSMARK_NUM);
-			}
-			fprintf(fp,"\n\t");
-			break;
-		case MPLS_OP_EXP_FWD:
-			fprintf(fp, "exp-fwd ");
-			for(j=0;j<MPLS_EXP_NUM;j++) {
-				key = ci->exp_fwd.key[j];
-				mpls_smart_print_key(fp, key,j,&first,&last,&repeating_value,MPLS_EXP_NUM);
-			}
-			fprintf(fp,"\n\t");
 			break;
 		case MPLS_OP_EXP2TC:
 			fprintf(fp, "exp2tc ");
