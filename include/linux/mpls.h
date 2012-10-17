@@ -33,6 +33,10 @@
 #include <net/if.h>
 #endif
 
+#if defined __KERNEL__
+#include <linux/in.h>
+#include <linux/in6.h>
+#endif
 
 /**
 *MPLS DEBUGGING
@@ -43,28 +47,18 @@
 /*based on netlink_group_mask from net/netlink/af_netlink.c */
 #define _group_mask(group_id) group_id ? 1 << (group_id - 1) : 0
 
-#define MPLS_NETLINK_NAME         "nlmpls"
-#define	MPLS_GRP_ILM_NAME	      "ilm_mcast_grp"
-#define	MPLS_GRP_NHLFE_NAME	      "nhlfe_mcast_grp"
-#define	MPLS_GRP_XC_NAME	      "xc_mcast_grp"
-#define	MPLS_GRP_LABELSPACE_NAME  "lspace_mcast_grp"
-#define MPLS_GRP_GET_NAME         "get_mcast_grp"
+#define MPLS_NETLINK_NAME "nlmpls"
+#define	MPLS_GRP_ILM_NAME "ilm_mcast_grp"
+#define	MPLS_GRP_NHLFE_NAME "nhlfe_mcast_grp"
+#define	MPLS_GRP_XC_NAME "xc_mcast_grp"
+#define	MPLS_GRP_LS_NAME "ls_mcast_grp"
+#define MPLS_GRP_GET_NAME "get_mcast_grp"
 
-#define MPLS_IPV4_EXPLICIT_NULL  0   /* only valid as sole label stack entry
-					   Pop label and send to IPv4 stack */
-#define MPLS_ROUTER_ALERT  1       /* anywhere except bottom, packet it is
-					   forwared to a software module
-					   determined by the next label,
-					   if the packet is forwarded, push this
-					   label back on */
-#define MPLS_IPV6_EXPLICIT_NULL  2    /* only valid as sole label stack entry
-					   Pop label and send to IPv6 stack */
-#define MPLS_IMPLICIT_NULL  3       /* a LIB with this, signifies to pop
-					   the next label and use that */
-
-#define MPLS_CHANGE_MTU		0x01
-#define MPLS_CHANGE_PROP_TTL	0x02
-#define MPLS_CHANGE_INSTR	0x04
+enum mpls_change {
+	MPLS_CHANGE_MTU = 0x1,
+	MPLS_CHANGE_PROP_TTL = (0x1 << 1),
+	MPLS_CHANGE_INSTR = (0x1 << 2),
+};
 
 enum mpls_dir {
 	MPLS_IN = 0x10,
@@ -77,6 +71,9 @@ enum mpls_opcode_enum {
 	MPLS_OP_PEEK,
 	MPLS_OP_PUSH,
 	MPLS_OP_FWD,
+	MPLS_OP_NF_FWD,
+	MPLS_OP_DS_FWD,
+	MPLS_OP_EXP_FWD,
 	MPLS_OP_SET,
 	MPLS_OP_SET_TC,
 	MPLS_OP_SET_DS,
@@ -89,7 +86,7 @@ enum mpls_opcode_enum {
 	MPLS_OP_MAX
 };
 
-#define MPLS_HDR_LEN  4
+#define MPLS_HDR_LEN 4
 
 struct mpls_in_label_req {
 	__u32 label;
@@ -97,12 +94,14 @@ struct mpls_in_label_req {
 	__u8 owner;   /* Routing protocol */
 };
 
-/*2^10*/
-#define MPLS_LABELSPACE_MAX (1 << 10)
+/*2^12 - 1 (0xfff)*/
+#define MPLS_LS_MAX ((1 << 12) - 2)
+#define INACTIVE_LS (-1)
+#define DEFAULT_LS ((1 << 12) - 1)
 
-struct mpls_labelspace_req {
+struct mpls_ls_req {
 	int ifindex;                  /* Index to the MPLS-enab. interface*/
-	int labelspace;               /* Labelspace IN/SET -- OUT/GET     */
+	int ls;               /* Labelspace IN/SET -- OUT/GET     */
 };
 
 struct mpls_nexthop_info {
@@ -134,31 +133,9 @@ struct mpls_tunnel_req {
 };
 
 #define MPLS_NFMARK_NUM 64
-
-struct mpls_nfmark_fwd {
-	__u32 key[MPLS_NFMARK_NUM];
-	__u16 mask;
-};
-
 #define MPLS_DSMARK_NUM 64
-
-struct mpls_dsmark_fwd {
-	__u32 key[MPLS_DSMARK_NUM];
-	__u8 mask;
-};
-
 #define MPLS_TCINDEX_NUM 64
-
-struct mpls_tcindex_fwd {
-	__u32 key[MPLS_TCINDEX_NUM];
-	__u16 mask;
-};
-
 #define MPLS_EXP_NUM 8
-
-struct mpls_exp_fwd {
-	__u32 key[MPLS_EXP_NUM];
-};
 
 struct mpls_exp2tcindex {
 	__u16 data[MPLS_EXP_NUM];
@@ -189,9 +166,6 @@ struct mpls_instr_elem {
 	union {
 		__u32 push;
 		__u32 fwd;
-		struct mpls_nfmark_fwd nf_fwd;
-		struct mpls_dsmark_fwd ds_fwd;
-		struct mpls_exp_fwd exp_fwd;
 		struct mpls_nexthop_info set;
 		__u32 set_rx;
 		__u16 set_tc;
@@ -223,24 +197,20 @@ enum {
 	MPLS_CMD_NEWXC,
 	MPLS_CMD_DELXC,
 	MPLS_CMD_GETXC,
-	MPLS_CMD_SETLABELSPACE,
-	MPLS_CMD_GETLABELSPACE,
+	MPLS_CMD_SETLS,
+	MPLS_CMD_GETLS,
 	__MPLS_CMD_MAX,
 };
-
-#define MPLS_CMD_MAX (__MPLS_CMD_MAX - 1)
 
 enum {
 	MPLS_ATTR_UNSPEC,
 	MPLS_ATTR_ILM,
 	MPLS_ATTR_NHLFE,
 	MPLS_ATTR_XC,
-	MPLS_ATTR_LABELSPACE,
+	MPLS_ATTR_LS,
 	MPLS_ATTR_INSTR,
 	__MPLS_ATTR_MAX,
 };
-
-#define MPLS_ATTR_MAX (__MPLS_ATTR_MAX - 1)
 
 #define key_ls(key)																			\
 	(((__u32)(key) & ((__u32)(0xfff) << 20)) >> 20)

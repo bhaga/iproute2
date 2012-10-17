@@ -51,10 +51,10 @@ unsigned int mpls_netlink_id;
 struct rtnl_handle rth_nhlfe;	/* RTNL for NHLFE*/
 struct rtnl_handle rth_ilm;		/* RTNL for ILM*/
 struct rtnl_handle rth_xc;		/* RTNL for XC */
-struct rtnl_handle rth_labelspace;		/* RTNL for Labelspace */
+struct rtnl_handle rth_ls;		/* RTNL for Labelspace */
 struct rtnl_handle rth = { .fd = -1 }; /*for getting interface names*/
 
-extern int do_mplsmonitor(int argc, char **argv,unsigned int MPLS_GRP_NHLFE,unsigned int MPLS_GRP_ILM,unsigned int MPLS_GRP_XC,unsigned int MPLS_GRP_LABELSPACE);
+extern int do_mplsmonitor(int argc, char **argv,unsigned int MPLS_GRP_NHLFE,unsigned int MPLS_GRP_ILM,unsigned int MPLS_GRP_XC,unsigned int MPLS_GRP_LS);
 int print_mpls(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg);
 int print_tunnel(int cmd, const struct mpls_tunnel_req *mtr, void *arg);
 int print_all_tunnels(void);
@@ -65,19 +65,19 @@ int mpls_list(int cmd,int argc, char **argv);
 
 static void usage(void)
 {
-	fprintf(stderr, "Usage: mpls ilm CMD label LABEL [labelspace NUMBER] FWD\n");
+	fprintf(stderr, "Usage: mpls ilm CMD label LABEL [(labelspace | ls) NUMBER] FWD\n");
 	fprintf(stderr, "       mpls nhlfe CMD key KEY [[mtu MTU] | [propagate_ttl | no_propagate_ttl] | [instructions INSTR]]\n");
-	fprintf(stderr, "       mpls xc CMD ilm_label LABEL ilm_labelspace NUMBER nhlfe_key KEY\n");
-	fprintf(stderr, "       mpls labelspace set NAME NUMBER\n");
-	fprintf(stderr, "       mpls labelspace set NAME -1\n");
+	fprintf(stderr, "       mpls xc CMD ilm_label LABEL ilm_ls NUMBER nhlfe_key KEY\n");
+	fprintf(stderr, "       mpls (labelspace | ls) set NAME NUMBER\n");
+	fprintf(stderr, "       mpls (labelspace | ls) set NAME -1\n");
 	fprintf(stderr, "       mpls tunnel add nhlfe KEY\n");
 	fprintf(stderr, "       mpls tunnel change dev NAME nhlfe KEY\n");
 	fprintf(stderr, "       mpls tunnel del dev NAME\n");
 	fprintf(stderr, "\n");
-	fprintf(stderr, "       mpls ilm show [label LABEL [labelspace NUMBER]]\n");
+	fprintf(stderr, "       mpls ilm show [label LABEL [(labelspace| ls) NUMBER]]\n");
 	fprintf(stderr, "       mpls nhlfe show [key KEY]\n");
-	fprintf(stderr, "       mpls xc show [ilm_label LABEL [ilm_labelspace NUMBER]]\n");
-	fprintf(stderr, "       mpls labelspace show [NAME]\n");
+	fprintf(stderr, "       mpls xc show [ilm_label LABEL [ilm_ls NUMBER]]\n");
+	fprintf(stderr, "       mpls (labelspace | ls) show [NAME]\n");
 	fprintf(stderr, "       mpls tunnel show [dev NAME]\n");
 	fprintf(stderr, "       mpls stats\n");
 	fprintf(stderr, "       mpls show\n");
@@ -156,7 +156,7 @@ int mpls_table_list(int argc, char **argv)
 		fprintf(stdout,"---\nXC entries:\n---\n");
 		mpls_list(MPLS_CMD_GETXC,0,NULL);
 		fprintf(stdout,"---\nLABELSPACE entries:\n---\n");
-		mpls_list(MPLS_CMD_GETLABELSPACE,0,NULL);
+		mpls_list(MPLS_CMD_GETLS,0,NULL);
 		fprintf(stdout,"---\nSTATS:\n---\n");
 		print_stats();
 	}
@@ -567,11 +567,12 @@ mpls_ilm_modify(int cmd, unsigned flags, int argc, char **argv)
 	ghdr->cmd = cmd;
 
 	while (argc > 0) {
-		if (strcmp(*argv, "labelspace") == 0) {
+		if (strcmp(*argv, "labelspace") == 0 ||
+				strcmp(*argv, "ls") == 0) {
 			__u32 ls;
 			NEXT_ARG();
 			if (get_unsigned(&ls, *argv, 0))
-				invarg(*argv, "invalid labelspace");
+				invarg(*argv, "invalid label space");
 			set_key_ls(mil.label, ls);
 		} else if (strcmp(*argv, "label") == 0) {
 			NEXT_ARG();
@@ -686,7 +687,7 @@ mpls_xc_modify(int cmd, unsigned flags, int argc, char **argv)
 
 	while (argc > 0) {
 
-		if (strcmp(*argv, "ilm_labelspace") == 0) {
+		if (strcmp(*argv, "ilm_ls") == 0) {
 			__u32 ls;
 			NEXT_ARG();
 			if (get_unsigned(&ls, *argv, 0) || ls > 255)
@@ -723,15 +724,15 @@ mpls_xc_modify(int cmd, unsigned flags, int argc, char **argv)
 }
 
 int
-mpls_labelspace_modify(int cmd, unsigned flags, int argc, char **argv)
+mpls_ls_modify(int cmd, unsigned flags, int argc, char **argv)
 {
-	__u32 labelspace = -2;
+	__u32 ls = -2;
 	struct genlmsghdr		*ghdr;
 	struct {
 		struct nlmsghdr 	n;
 		char			buf[4096];
 	} req;
-	struct mpls_labelspace_req 	ls;
+	struct mpls_ls_req ls_req;
 
 	memset(&req, 0, sizeof(req));
 	memset(&ls, 0, sizeof(ls));
@@ -743,27 +744,26 @@ mpls_labelspace_modify(int cmd, unsigned flags, int argc, char **argv)
 	ghdr = NLMSG_DATA(&req.n);
 	ghdr->cmd = cmd;
 
-	ls.ifindex = ll_name_to_index(*argv);
+	ls_req.ifindex = ll_name_to_index(*argv);
 
 	if(NEXT_ARG_OK()) {
 		NEXT_ARG();
-		if (get_unsigned(&labelspace, *argv, 0))
-		    if (!get_integer((int*) &labelspace, *argv, 0) && labelspace != (__u32) -1)
+		if (get_unsigned(&ls, *argv, 0))
+		    if (!get_integer((int*) &ls, *argv, 0) && ls != (__u32) -1)
 			invarg(*argv, "invalid labelspace");
-	}
-	else
-		labelspace = 0;
+	} else
+		ls = 0;
 
-	ls.labelspace = labelspace;
+	ls_req.ls = ls;
 
-	if (ls.ifindex == 0 || ls.labelspace < -1) {
+	if (ls_req.ifindex == 0 || ls_req.ls < -1) {
 		fprintf(stderr, "Invalid arguments\n");
 		exit(1);
 	}
 
-	addattr_l(&req.n, sizeof(req), MPLS_ATTR_LABELSPACE, &ls, sizeof(ls));
+	addattr_l(&req.n, sizeof(req), MPLS_ATTR_LS, &ls_req, sizeof(ls_req));
 
-	if (rtnl_talk(&rth_labelspace, &req.n, 0, 0, &req.n, NULL, NULL) < 0)
+	if (rtnl_talk(&rth_ls, &req.n, 0, 0, &req.n, NULL, NULL) < 0)
 		exit(2);
 
 	print_mpls(NULL, &req.n, stdout);
@@ -1024,17 +1024,17 @@ int print_xc(int cmd, const struct nlmsghdr *n, void *arg, struct rtattr **tb)
 	return 0;
 }
 
-int print_labelspace(int cmd, const struct nlmsghdr *n, void *arg, struct rtattr **tb)
+int print_ls(int cmd, const struct nlmsghdr *n, void *arg, struct rtattr **tb)
 {
 	FILE *fp = (FILE*)arg;
-	struct mpls_labelspace_req *ls;
+	struct mpls_ls_req *ls;
 
-	ls = RTA_DATA(tb[MPLS_ATTR_LABELSPACE]);
+	ls = RTA_DATA(tb[MPLS_ATTR_LS]);
 
 	fprintf(fp, "LABELSPACE entry ");
 
 	fprintf(fp, "dev %s ", ll_index_to_name(ls->ifindex));
-	fprintf(fp, "labelspace %d ",ls->labelspace);
+	fprintf(fp, "ls %d ",ls->ls);
 	fprintf(fp, "\n");
 	fflush(fp);
 
@@ -1188,7 +1188,7 @@ int print_all_tunnels(){
 
 int print_mpls(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 {
-	struct rtattr *tb[MPLS_ATTR_MAX + 1];
+	struct rtattr *tb[__MPLS_ATTR_MAX];
 	struct genlmsghdr *ghdr = NLMSG_DATA(n);
 	int len = n->nlmsg_len;
 	struct rtattr *attrs;
@@ -1206,7 +1206,7 @@ int print_mpls(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 	}
 
 	attrs = (struct rtattr *) ((char *) ghdr + GENL_HDRLEN);
-	parse_rtattr(tb, MPLS_ATTR_MAX, attrs, len);
+	parse_rtattr(tb, __MPLS_ATTR_MAX - 1, attrs, len);
 
 	switch (ghdr->cmd) {
 	case MPLS_CMD_NEWILM:
@@ -1218,8 +1218,8 @@ int print_mpls(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 	case MPLS_CMD_NEWXC:
 	case MPLS_CMD_DELXC:
 		return print_xc(ghdr->cmd, n,arg,tb);
-	case MPLS_CMD_SETLABELSPACE:
-		return print_labelspace(ghdr->cmd, n,arg,tb);
+	case MPLS_CMD_SETLS:
+		return print_ls(ghdr->cmd, n,arg,tb);
 	default:
 		return 0;
 	}
@@ -1351,19 +1351,19 @@ int do_xc(int argc, char **argv) {
 	return 0;
 }
 
-int do_labelspace(int argc, char **argv) {
+int do_ls(int argc, char **argv) {
 
 	if (argc <= 0 || matches(*argv, "list") == 0 ||
 			matches(*argv, "show") == 0){
 		if(NEXT_ARG_OK()){
 			int args;
-			args = argc-1>=2? 2: argc-1;
-			return mpls_labelspace_modify(MPLS_CMD_GETLABELSPACE,0, args, argv+1);
+			args = (argc - 1 >= 2) ? 2 : argc - 1;
+			return mpls_ls_modify(MPLS_CMD_GETLS,0, args, argv+1);
 		} else
-			return mpls_list(MPLS_CMD_GETLABELSPACE,argc-1, argv+1);
+			return mpls_list(MPLS_CMD_GETLS, argc-1, argv+1);
 	}
 	if (matches(*argv, "set") == 0)
-		return mpls_labelspace_modify(MPLS_CMD_SETLABELSPACE,0, argc-1, argv+1);
+		return mpls_ls_modify(MPLS_CMD_SETLS,0, argc-1, argv+1);
 	if (matches(*argv, "help") == 0)
 		usage();
 	else {
@@ -1482,7 +1482,7 @@ static int _mpls_get_mcast_group_ids(struct nlmsghdr *n){
 							fprintf(stderr,"No ID for XC mcast group!\n");
 							return -1;
 						}
-					} else if (strncmp(name,MPLS_GRP_LABELSPACE_NAME,strlen(MPLS_GRP_LABELSPACE_NAME))==0) {
+					} else if (strncmp(name,MPLS_GRP_LS_NAME,strlen(MPLS_GRP_LS_NAME))==0) {
 						if (tb[2]) {
 							__u32 *id = RTA_DATA(tb[CTRL_ATTR_MCAST_GRP_ID]);
 							mpls_grp_lspace = _group_mask(*id);
@@ -1614,12 +1614,12 @@ int main(int argc, char **argv) {
 		ll_init_map(&rth_xc);
 		rtnl_close(&rth_xc);
 
-		if (rtnl_open(&rth_labelspace, 0) < 0) {
+		if (rtnl_open(&rth_ls, 0) < 0) {
 			fprintf (stderr, "Error openning netlink socket\n");
 			exit(-1);
 		}
-		ll_init_map(&rth_labelspace);
-		rtnl_close(&rth_labelspace);
+		ll_init_map(&rth_ls);
+		rtnl_close(&rth_ls);
 
 		if (matches(argv[1], "monitor") == 0) {
 			retval = do_mplsmonitor(argc-2,argv+2,mpls_grp_nhlfe,mpls_grp_ilm,mpls_grp_xc,mpls_grp_lspace);
@@ -1639,7 +1639,7 @@ int main(int argc, char **argv) {
 				rtnl_close(&rth_ilm);
 				exit(-1);
 			}
-			if (rtnl_open_byproto(&rth_labelspace,mpls_grp_lspace | mpls_grp_get, NETLINK_GENERIC) < 0) {
+			if (rtnl_open_byproto(&rth_ls,mpls_grp_lspace | mpls_grp_get, NETLINK_GENERIC) < 0) {
 				fprintf (stderr,"Error opening LABELSPACE rtnl\n");
 				rtnl_close(&rth_nhlfe);
 				rtnl_close(&rth_ilm);
@@ -1651,7 +1651,7 @@ int main(int argc, char **argv) {
 				rtnl_close(&rth_nhlfe);
 				rtnl_close(&rth_ilm);
 				rtnl_close(&rth_xc);
-				rtnl_close(&rth_labelspace);
+				rtnl_close(&rth_ls);
 				exit(-1);
 			}
 
@@ -1661,8 +1661,9 @@ int main(int argc, char **argv) {
 				retval = do_ilm(argc-2,argv+2);
 			} else if (matches(argv[1], "xc") == 0) {
 				retval = do_xc(argc-2,argv+2);
-			} else if (matches(argv[1], "labelspace") == 0) {
-				retval = do_labelspace(argc-2,argv+2);
+			} else if (matches(argv[1], "labelspace") == 0 ||
+					matches(argv[1], "ls") == 0) {
+				retval = do_ls(argc-2,argv+2);
 			} else if (matches(argv[1], "tunnel") == 0) {
 				retval = do_tunnel(argc-2,argv+2);
 			} else if (matches(argv[1], "stats") == 0) {
@@ -1676,7 +1677,7 @@ int main(int argc, char **argv) {
 			rtnl_close(&rth_nhlfe);
 			rtnl_close(&rth_ilm);
 			rtnl_close(&rth_xc);
-			rtnl_close(&rth_labelspace);
+			rtnl_close(&rth_ls);
 			rtnl_close(&rth);
 		}
 	} else {

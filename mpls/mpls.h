@@ -26,7 +26,7 @@ static const struct message rtproto_str[] = {
 
 extern int print_ilm(int cmd, const struct nlmsghdr *n, void *arg, struct rtattr **tb);
 extern int print_xc(int cmd, const struct nlmsghdr *n, void *arg, struct rtattr **tb);
-extern int print_labelspace(int cmd, const struct nlmsghdr *n, void *arg, struct rtattr **tb);
+extern int print_ls(int cmd, const struct nlmsghdr *n, void *arg, struct rtattr **tb);
 extern int print_nhlfe(int cmd, const struct nlmsghdr *n, void *arg, struct rtattr **tb);
 
 #define GENL_MAX_FAM_GRPS	256
