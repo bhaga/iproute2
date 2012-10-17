@@ -35,6 +35,11 @@ static void usage(void)
 	exit(-1);
 }
 
+int nhlfe = 0;
+int ilm = 0;
+int xc = 0;
+int ls = 0;
+
 int accept_msg(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 {
 	FILE *fp = (FILE*)arg;
@@ -61,18 +66,22 @@ int accept_msg(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 	switch (ghdr->cmd) {
 		case MPLS_CMD_NEWNHLFE:
 		case MPLS_CMD_DELNHLFE:
-			print_nhlfe(ghdr->cmd, n, arg, tb);
+			if (nhlfe)
+				print_nhlfe(ghdr->cmd, n, arg, tb);
 			return 0;
 		case MPLS_CMD_NEWILM:
 		case MPLS_CMD_DELILM:
-			print_ilm(ghdr->cmd, n, arg, tb);
+			if (ilm)
+				print_ilm(ghdr->cmd, n, arg, tb);
 			return 0;
 		case MPLS_CMD_NEWXC:
 		case MPLS_CMD_DELXC:
-			print_xc(ghdr->cmd, n, arg, tb);
+			if (xc)
+				print_xc(ghdr->cmd, n, arg, tb);
 			return 0;
 		case MPLS_CMD_SETLS:
-			print_ls(ghdr->cmd, n, arg, tb);
+			if (ls)
+				print_ls(ghdr->cmd, n, arg, tb);
 			return 0;
 		default:
 			return -1;
@@ -85,31 +94,30 @@ int accept_msg(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 	return 0;
 }
 
-int do_mplsmonitor(int argc, char **argv,unsigned int MPLS_GRP_NHLFE,unsigned int MPLS_GRP_ILM, unsigned int MPLS_GRP_XC, unsigned int MPLS_GRP_LS)
+int do_mplsmonitor(int argc, char **argv,unsigned int MPLS_MC_GRP)
 {
 	struct rtnl_handle rth;
-	unsigned int groups = MPLS_GRP_NHLFE | MPLS_GRP_ILM | MPLS_GRP_XC | MPLS_GRP_LS;
-	int nhlfe=0;
-	int ilm=0;
-	int xc=0;
-	int labelspace=0;
+	unsigned int groups = MPLS_MC_GRP;
+	nhlfe = 0;
+	ilm = 0;
+	xc = 0;
+	ls = 0;
 
 	while (argc > 0) {
 		if (matches(*argv, "nhlfe") == 0) {
-			nhlfe=1;
-			groups = 0;
+			nhlfe = 1;
 		} else if (matches(*argv, "ilm") == 0) {
-			ilm=1;
-			groups = 0;
+			ilm = 1;
 		} else if (matches(*argv, "xc") == 0) {
-			xc=1;
-			groups = 0;
+			xc = 1;
 		} else if (matches(*argv, "labelspace") == 0 ||
 				matches(*argv, "ls") == 0) {
-			labelspace=1;
-			groups = 0;
+			ls = 1;
 		} else if (strcmp(*argv, "all") == 0) {
-			groups =  MPLS_GRP_NHLFE | MPLS_GRP_ILM | MPLS_GRP_XC | MPLS_GRP_LS;
+			nhlfe = 1;
+			ilm = 1;
+			xc = 1;
+			ls = 1;
 		} else if (matches(*argv, "help") == 0) {
 			usage();
 		} else {
@@ -118,15 +126,6 @@ int do_mplsmonitor(int argc, char **argv,unsigned int MPLS_GRP_NHLFE,unsigned in
 		}
 		argc--;	argv++;
 	}
-
-	if (nhlfe)
-		groups |= MPLS_GRP_NHLFE;
-	if (ilm)
-		groups |= MPLS_GRP_ILM;
-	if (xc)
-		groups |= MPLS_GRP_XC;
-	if (labelspace)
-		groups |= MPLS_GRP_LS;
 
 	if (rtnl_open(&rth, 0) < 0) {
 		fprintf (stderr, "Error openning netlink socket\n");
@@ -139,14 +138,16 @@ int do_mplsmonitor(int argc, char **argv,unsigned int MPLS_GRP_NHLFE,unsigned in
 		exit(1);
 
 	fprintf(stdout,"Monitoring:\n");
-
-	if (groups&MPLS_GRP_NHLFE)
+	if (nhlfe)
 		fprintf(stdout,"NHLFE\n");
-	if (groups&MPLS_GRP_ILM)
+
+	if (ilm)
 		fprintf(stdout,"ILM\n");
-	if (groups&MPLS_GRP_XC)
+
+	if (xc)
 		fprintf(stdout,"XC\n");
-	if (groups&MPLS_GRP_LS)
+
+	if (ls)
 		fprintf(stdout,"LABELSPACE\n");
 
 	fprintf(stdout,"---\n");

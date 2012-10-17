@@ -41,20 +41,13 @@ int show_details = 0;
 int show_raw = 0;
 int resolve_hosts = 0;
 
-unsigned int mpls_grp_ilm;
-unsigned int mpls_grp_nhlfe;
-unsigned int mpls_grp_xc;
-unsigned int mpls_grp_lspace;
-unsigned int mpls_grp_get;
+unsigned int mpls_mc_grp;
 unsigned int mpls_netlink_id;
 
-struct rtnl_handle rth_nhlfe;	/* RTNL for NHLFE*/
-struct rtnl_handle rth_ilm;		/* RTNL for ILM*/
-struct rtnl_handle rth_xc;		/* RTNL for XC */
-struct rtnl_handle rth_ls;		/* RTNL for Labelspace */
+struct rtnl_handle rth_mpls;
 struct rtnl_handle rth = { .fd = -1 }; /*for getting interface names*/
 
-extern int do_mplsmonitor(int argc, char **argv,unsigned int MPLS_GRP_NHLFE,unsigned int MPLS_GRP_ILM,unsigned int MPLS_GRP_XC,unsigned int MPLS_GRP_LS);
+extern int do_mplsmonitor(int argc, char **argv,unsigned int MPLS_MC_GRP);
 int print_mpls(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg);
 int print_tunnel(int cmd, const struct mpls_tunnel_req *mtr, void *arg);
 int print_all_tunnels(void);
@@ -591,7 +584,7 @@ mpls_ilm_modify(int cmd, unsigned flags, int argc, char **argv)
 	addattr_l(&req.n, sizeof(req), MPLS_ATTR_INSTR, instr,
 			sizeof(*instr)+instr->instr_length*sizeof(struct mpls_instr_elem));
 
-	if (rtnl_talk(&rth_ilm, &req.n, 0, 0, &req.n, NULL, NULL) < 0)
+	if (rtnl_talk(&rth_mpls, &req.n, 0, 0, &req.n, NULL, NULL) < 0)
 		exit(2);
 
 	print_mpls(NULL, &req.n, stdout);
@@ -656,7 +649,7 @@ mpls_nhlfe_modify(int cmd, unsigned flags, int argc, char **argv)
 		addattr_l(&req.n, sizeof(req), MPLS_ATTR_INSTR, instr,
 				sizeof(*instr)+instr->instr_length*sizeof(struct mpls_instr_elem));
 
-	if (rtnl_talk(&rth_nhlfe, &req.n, 0, 0, &req.n, NULL, NULL) < 0)
+	if (rtnl_talk(&rth_mpls, &req.n, 0, 0, &req.n, NULL, NULL) < 0)
 		exit(2);
 
 	print_mpls(NULL, &req.n, stdout);
@@ -715,7 +708,7 @@ mpls_xc_modify(int cmd, unsigned flags, int argc, char **argv)
 
 	addattr_l(&req.n, sizeof(req), MPLS_ATTR_XC, &xc, sizeof(xc));
 
-	if (rtnl_talk(&rth_xc, &req.n, 0, 0, &req.n, NULL, NULL) < 0)
+	if (rtnl_talk(&rth_mpls, &req.n, 0, 0, &req.n, NULL, NULL) < 0)
 		exit(2);
 
 	print_mpls(NULL, &req.n, stdout);
@@ -763,7 +756,7 @@ mpls_ls_modify(int cmd, unsigned flags, int argc, char **argv)
 
 	addattr_l(&req.n, sizeof(req), MPLS_ATTR_LS, &ls_req, sizeof(ls_req));
 
-	if (rtnl_talk(&rth_ls, &req.n, 0, 0, &req.n, NULL, NULL) < 0)
+	if (rtnl_talk(&rth_mpls, &req.n, 0, 0, &req.n, NULL, NULL) < 0)
 		exit(2);
 
 	print_mpls(NULL, &req.n, stdout);
@@ -1446,11 +1439,7 @@ static int _mpls_get_mcast_group_ids(struct nlmsghdr *n){
 		int i;
 
 		parse_rtattr_nested(tb2, GENL_MAX_FAM_GRPS,	tb[CTRL_ATTR_MCAST_GROUPS]);
-		mpls_grp_ilm = 0;
-		mpls_grp_nhlfe = 0;
-		mpls_grp_xc = 0;
-		mpls_grp_lspace = 0;
-		mpls_grp_get = 0;
+		mpls_mc_grp = 0;
 
 		for (i = 0; i < GENL_MAX_FAM_GRPS; i++) {
 			if (tb2[i]) {
@@ -1458,52 +1447,20 @@ static int _mpls_get_mcast_group_ids(struct nlmsghdr *n){
 				parse_rtattr_nested(tb, CTRL_ATTR_MCAST_GRP_MAX, tb2[i]);
 				if (tb[1]) {
 					char *name = RTA_DATA(tb[CTRL_ATTR_MCAST_GRP_NAME]);
-					if(strncmp(name,MPLS_GRP_ILM_NAME,strlen(MPLS_GRP_ILM_NAME))==0){
+					if(strncmp(name,MPLS_MC_GRP_NAME,strlen(MPLS_MC_GRP_NAME)) == 0) {
 						if (tb[2]) {
 							__u32 *id = RTA_DATA(tb[CTRL_ATTR_MCAST_GRP_ID]);
-							mpls_grp_ilm = _group_mask(*id);
+							mpls_mc_grp = _group_mask(*id);
 						} else {
-							fprintf(stderr,"No ID for ILM mcast group!\n");
-							return -1;
-						}
-					} else if (strncmp(name,MPLS_GRP_NHLFE_NAME,strlen(MPLS_GRP_ILM_NAME))==0){
-						if (tb[2]) {
-							__u32 *id = RTA_DATA(tb[CTRL_ATTR_MCAST_GRP_ID]);
-							mpls_grp_nhlfe = _group_mask(*id);
-						} else {
-							fprintf(stderr,"No ID for NHLFE mcast group!\n");
-							return -1;
-						}
-					} else if (strncmp(name,MPLS_GRP_XC_NAME,strlen(MPLS_GRP_XC_NAME))==0) {
-						if (tb[2]) {
-							__u32 *id = RTA_DATA(tb[CTRL_ATTR_MCAST_GRP_ID]);
-							mpls_grp_xc = _group_mask(*id);
-						} else {
-							fprintf(stderr,"No ID for XC mcast group!\n");
-							return -1;
-						}
-					} else if (strncmp(name,MPLS_GRP_LS_NAME,strlen(MPLS_GRP_LS_NAME))==0) {
-						if (tb[2]) {
-							__u32 *id = RTA_DATA(tb[CTRL_ATTR_MCAST_GRP_ID]);
-							mpls_grp_lspace = _group_mask(*id);
-						} else {
-							fprintf(stderr,"No ID for LABELSPACE mcast group!\n");
-							return -1;
-						}
-					} else if (strncmp(name,MPLS_GRP_GET_NAME,strlen(MPLS_GRP_GET_NAME))==0) {
-						if (tb[2]) {
-							__u32 *id = RTA_DATA(tb[CTRL_ATTR_MCAST_GRP_ID]);
-							mpls_grp_get = _group_mask(*id);
-						} else {
-							fprintf(stderr,"No ID for GET mcast group!\n");
+							fprintf(stderr,"No ID for MPLS mcast group!\n");
 							return -1;
 						}
 					}
 				}
 			}
 		}
-		if(!mpls_grp_ilm && !mpls_grp_nhlfe && !mpls_grp_xc && !mpls_grp_lspace && !mpls_grp_get){
-			fprintf(stderr,"Not all IDs are caught!\n");
+		if(!mpls_mc_grp) {
+			fprintf(stderr,"Couldn't find multicast MPLS ID!\n");
 			return -1;
 		}
 	} else {
@@ -1593,65 +1550,23 @@ int main(int argc, char **argv) {
 		exit(-1);
 
 	if (argc > 1) {
-		if (rtnl_open(&rth_nhlfe, 0) < 0) {
+		if (rtnl_open(&rth_mpls, 0) < 0) {
 			fprintf (stderr, "Error openning netlink socket\n");
 			exit(-1);
 		}
-		ll_init_map(&rth_nhlfe);
-		rtnl_close(&rth_nhlfe);
-
-		if (rtnl_open(&rth_ilm, 0) < 0) {
-			fprintf (stderr, "Error openning netlink socket\n");
-			exit(-1);
-		}
-		ll_init_map(&rth_ilm);
-		rtnl_close(&rth_ilm);
-
-		if (rtnl_open(&rth_xc, 0) < 0) {
-			fprintf (stderr, "Error openning netlink socket\n");
-			exit(-1);
-		}
-		ll_init_map(&rth_xc);
-		rtnl_close(&rth_xc);
-
-		if (rtnl_open(&rth_ls, 0) < 0) {
-			fprintf (stderr, "Error openning netlink socket\n");
-			exit(-1);
-		}
-		ll_init_map(&rth_ls);
-		rtnl_close(&rth_ls);
+		ll_init_map(&rth_mpls);
+		rtnl_close(&rth_mpls);
 
 		if (matches(argv[1], "monitor") == 0) {
-			retval = do_mplsmonitor(argc-2,argv+2,mpls_grp_nhlfe,mpls_grp_ilm,mpls_grp_xc,mpls_grp_lspace);
+			retval = do_mplsmonitor(argc - 2, argv + 2, mpls_mc_grp);
 		} else {
-			if (rtnl_open_byproto(&rth_nhlfe,mpls_grp_nhlfe | mpls_grp_get, NETLINK_GENERIC) < 0) {
-				fprintf (stderr,"Error opening NHLFE rtnl\n");
-				exit(-1);
-			}
-			if (rtnl_open_byproto(&rth_ilm,mpls_grp_ilm | mpls_grp_get, NETLINK_GENERIC) < 0) {
-				fprintf (stderr,"Error opening ILM rtnl\n");
-				rtnl_close(&rth_nhlfe);
-				exit(-1);
-			}
-			if (rtnl_open_byproto(&rth_xc, mpls_grp_xc | mpls_grp_get, NETLINK_GENERIC) < 0) {
-				fprintf (stderr,"Error opening XC rtnl\n");
-				rtnl_close(&rth_nhlfe);
-				rtnl_close(&rth_ilm);
-				exit(-1);
-			}
-			if (rtnl_open_byproto(&rth_ls,mpls_grp_lspace | mpls_grp_get, NETLINK_GENERIC) < 0) {
-				fprintf (stderr,"Error opening LABELSPACE rtnl\n");
-				rtnl_close(&rth_nhlfe);
-				rtnl_close(&rth_ilm);
-				rtnl_close(&rth_xc);
+			if (rtnl_open_byproto(&rth_mpls, mpls_mc_grp, NETLINK_GENERIC) < 0) {
+				fprintf (stderr,"Error opening MPLS rtnl\n");
 				exit(-1);
 			}
 			if (rtnl_open(&rth, 0) < 0){
 				fprintf (stderr,"Error opening rtnl\n");
-				rtnl_close(&rth_nhlfe);
-				rtnl_close(&rth_ilm);
-				rtnl_close(&rth_xc);
-				rtnl_close(&rth_ls);
+				rtnl_close(&rth_mpls);
 				exit(-1);
 			}
 
@@ -1674,10 +1589,7 @@ int main(int argc, char **argv) {
 				usage();
 				retval = 1;
 			}
-			rtnl_close(&rth_nhlfe);
-			rtnl_close(&rth_ilm);
-			rtnl_close(&rth_xc);
-			rtnl_close(&rth_ls);
+			rtnl_close(&rth_mpls);
 			rtnl_close(&rth);
 		}
 	} else {

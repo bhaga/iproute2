@@ -48,11 +48,7 @@
 #define _group_mask(group_id) group_id ? 1 << (group_id - 1) : 0
 
 #define MPLS_NETLINK_NAME "nlmpls"
-#define	MPLS_GRP_ILM_NAME "ilm_mcast_grp"
-#define	MPLS_GRP_NHLFE_NAME "nhlfe_mcast_grp"
-#define	MPLS_GRP_XC_NAME "xc_mcast_grp"
-#define	MPLS_GRP_LS_NAME "ls_mcast_grp"
-#define MPLS_GRP_GET_NAME "get_mcast_grp"
+#define MPLS_MC_GRP_NAME "mpls_mcast_grp"
 
 enum mpls_change {
 	MPLS_CHANGE_MTU = 0x1,
@@ -71,9 +67,6 @@ enum mpls_opcode_enum {
 	MPLS_OP_PEEK,
 	MPLS_OP_PUSH,
 	MPLS_OP_FWD,
-	MPLS_OP_NF_FWD,
-	MPLS_OP_DS_FWD,
-	MPLS_OP_EXP_FWD,
 	MPLS_OP_SET,
 	MPLS_OP_SET_TC,
 	MPLS_OP_SET_DS,
@@ -83,7 +76,7 @@ enum mpls_opcode_enum {
 	MPLS_OP_TC2EXP,
 	MPLS_OP_DS2EXP,
 	MPLS_OP_NF2EXP,
-	MPLS_OP_MAX
+	__MPLS_OP_MAX
 };
 
 #define MPLS_HDR_LEN 4
