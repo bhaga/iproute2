@@ -31,13 +31,11 @@ static void usage(void) __attribute__((noreturn));
 
 static void usage(void)
 {
-	fprintf(stderr, "Usage: mpls monitor [all] [nhlfe] [ilm] [xc] [labelspace]\n");
+	fprintf(stderr, "Usage: mpls monitor [all] [ilm] [labelspace]\n");
 	exit(-1);
 }
 
-int nhlfe = 0;
 int ilm = 0;
-int xc = 0;
 int ls = 0;
 
 int accept_msg(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
@@ -64,20 +62,10 @@ int accept_msg(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
         parse_rtattr(tb, __MPLS_ATTR_MAX - 1, attrs, len);
 
 	switch (ghdr->cmd) {
-		case MPLS_CMD_NEWNHLFE:
-		case MPLS_CMD_DELNHLFE:
-			if (nhlfe)
-				print_nhlfe(ghdr->cmd, n, arg, tb);
-			return 0;
 		case MPLS_CMD_NEWILM:
 		case MPLS_CMD_DELILM:
 			if (ilm)
 				print_ilm(ghdr->cmd, n, arg, tb);
-			return 0;
-		case MPLS_CMD_NEWXC:
-		case MPLS_CMD_DELXC:
-			if (xc)
-				print_xc(ghdr->cmd, n, arg, tb);
 			return 0;
 		case MPLS_CMD_SETLS:
 			if (ls)
@@ -98,25 +86,17 @@ int do_mplsmonitor(int argc, char **argv,unsigned int MPLS_MC_GRP)
 {
 	struct rtnl_handle rth;
 	unsigned int groups = MPLS_MC_GRP;
-	nhlfe = 0;
 	ilm = 0;
-	xc = 0;
 	ls = 0;
 
 	while (argc > 0) {
-		if (matches(*argv, "nhlfe") == 0) {
-			nhlfe = 1;
-		} else if (matches(*argv, "ilm") == 0) {
+		if (matches(*argv, "ilm") == 0) {
 			ilm = 1;
-		} else if (matches(*argv, "xc") == 0) {
-			xc = 1;
 		} else if (matches(*argv, "labelspace") == 0 ||
-				matches(*argv, "ls") == 0) {
+					matches(*argv, "ls") == 0) {
 			ls = 1;
 		} else if (strcmp(*argv, "all") == 0) {
-			nhlfe = 1;
 			ilm = 1;
-			xc = 1;
 			ls = 1;
 		} else if (matches(*argv, "help") == 0) {
 			usage();
@@ -138,14 +118,8 @@ int do_mplsmonitor(int argc, char **argv,unsigned int MPLS_MC_GRP)
 		exit(1);
 
 	fprintf(stdout,"Monitoring:\n");
-	if (nhlfe)
-		fprintf(stdout,"NHLFE\n");
-
 	if (ilm)
 		fprintf(stdout,"ILM\n");
-
-	if (xc)
-		fprintf(stdout,"XC\n");
 
 	if (ls)
 		fprintf(stdout,"LABELSPACE\n");

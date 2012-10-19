@@ -42,23 +42,17 @@
 *MPLS DEBUGGING
 **/
 
-#define MPLS_LINUX_VERSION	0x01090910
+#define MPLS_LINUX_VERSION (0x01090100)
 
 /*based on netlink_group_mask from net/netlink/af_netlink.c */
-#define _group_mask(group_id) group_id ? 1 << (group_id - 1) : 0
+#define _group_mask(group_id) ((group_id) ? 1 << ((group_id) - 1) : 0)
 
 #define MPLS_NETLINK_NAME "nlmpls"
 #define MPLS_MC_GRP_NAME "mpls_mcast_grp"
 
 enum mpls_change {
 	MPLS_CHANGE_MTU = 0x1,
-	MPLS_CHANGE_PROP_TTL = (0x1 << 1),
-	MPLS_CHANGE_INSTR = (0x1 << 2),
-};
-
-enum mpls_dir {
-	MPLS_IN = 0x10,
-	MPLS_OUT = 0x20
+	MPLS_CHANGE_INSTR = (0x1 << 1),
 };
 
 enum mpls_opcode_enum {
@@ -66,38 +60,17 @@ enum mpls_opcode_enum {
 	MPLS_OP_POP,
 	MPLS_OP_PEEK,
 	MPLS_OP_PUSH,
-	MPLS_OP_FWD,
-	MPLS_OP_SET,
-	MPLS_OP_SET_TC,
+	MPLS_OP_SWAP,
+	MPLS_OP_SEND_IPv4,
+	MPLS_OP_SEND_IPv6,
+	MPLS_OP_SET_TC_INDEX,
 	MPLS_OP_SET_DS,
-	MPLS_OP_SET_EXP,
-	MPLS_OP_EXP2TC,
-	MPLS_OP_EXP2DS,
-	MPLS_OP_TC2EXP,
-	MPLS_OP_DS2EXP,
-	MPLS_OP_NF2EXP,
 	__MPLS_OP_MAX
 };
 
-#define MPLS_HDR_LEN 4
+#define MPLS_HDR_LEN (sizeof(u32))
 
-struct mpls_in_label_req {
-	__u32 label;
-	__u8 change_flag;
-	__u8 owner;   /* Routing protocol */
-};
-
-/*2^12 - 1 (0xfff)*/
-#define MPLS_LS_MAX ((1 << 12) - 2)
-#define INACTIVE_LS (-1)
-#define DEFAULT_LS ((1 << 12) - 1)
-
-struct mpls_ls_req {
-	int ifindex;                  /* Index to the MPLS-enab. interface*/
-	int ls;               /* Labelspace IN/SET -- OUT/GET     */
-};
-
-struct mpls_nexthop_info {
+struct mpls_nh {
 	__u32 iface;
 	union {
 		struct sockaddr addr;
@@ -106,18 +79,67 @@ struct mpls_nexthop_info {
 	};
 };
 
-struct mpls_out_label_req {
-	__u32 label;
-	__u32 mtu;
-	__u8 propagate_ttl;
-	__u8 change_flag;
-	__u8 owner;        /* Routing protocol */
+struct mpls_push {
+#if defined(__LITTLE_ENDIAN_BITFIELD)
+	__u32 label_u:4;
+	__u32 label_l:16;
+#elif defined (__BIG_ENDIAN_BITFIELD)
+	__u32 label_l:16;
+	__u32 label_u:4;
+#else
+#error	"Please fix <asm/byteorder.h>"
+#endif
+	__u8 tc:3;
+	__u16 pad:9;
 };
 
-struct mpls_xconnect_req {
-	__u32 in;
-	__u32 out;
-	__u8 owner;        /* Routing protocol */
+struct ilm_key {
+	union {
+		struct {
+#if defined(__LITTLE_ENDIAN_BITFIELD)
+			__u32 label_u:4;
+			__u32 label_l:16;
+#elif defined (__BIG_ENDIAN_BITFIELD)
+			__u32 label_l:16;
+			__u32 label_u:4;
+#else
+#error	"Please fix <asm/byteorder.h>"
+#endif
+			__u32 __pad:12;
+		};
+		struct {
+			__u32 label:20;
+			__u16 ls:12;
+		};
+	};
+};
+
+struct instr_req {
+	__u16 opcode;
+	union {
+		struct mpls_push push;
+		__u16 pop;
+		__u16 tc_index;
+		__u16 dscp;
+		struct mpls_nh nh;
+	};
+};
+
+struct ilm_req {
+	struct ilm_key label;
+	__u8 change_flag;
+	__u8 tc;
+	__u8 owner;   /* Routing protocol */
+};
+
+struct nhlfe_req {
+	__u8 instr_length;
+	struct instr_req instr[0];
+};
+
+struct ls_req {
+	int ifindex;
+	int ls;
 };
 
 struct mpls_tunnel_req {
@@ -125,58 +147,10 @@ struct mpls_tunnel_req {
 	__u32 nhlfe_key;
 };
 
-#define MPLS_NFMARK_NUM 64
-#define MPLS_DSMARK_NUM 64
-#define MPLS_TCINDEX_NUM 64
-#define MPLS_EXP_NUM 8
-
-struct mpls_exp2tcindex {
-	__u16 data[MPLS_EXP_NUM];
-};
-
-struct mpls_exp2dsmark {
-	__u8 data[MPLS_EXP_NUM];
-};
-
-struct mpls_tcindex2exp {
-	__u8 mask;
-	__u8 data[MPLS_TCINDEX_NUM];
-};
-
-struct mpls_dsmark2exp {
-	__u8 mask;
-	__u8 data[MPLS_DSMARK_NUM];
-};
-
-struct mpls_nfmark2exp {
-	__u8 mask;
-	__u8 data[MPLS_NFMARK_NUM];
-};
-
-struct mpls_instr_elem {
-	__u16 opcode;
-	__u8 direction;
-	union {
-		__u32 push;
-		__u32 fwd;
-		struct mpls_nexthop_info set;
-		__u32 set_rx;
-		__u16 set_tc;
-		__u16 set_ds;
-		__u8 set_exp;
-		struct mpls_exp2tcindex exp2tc;
-		struct mpls_exp2dsmark exp2ds;
-		struct mpls_tcindex2exp tc2exp;
-		struct mpls_dsmark2exp ds2exp;
-		struct mpls_nfmark2exp nf2exp;
-	};
-};
-
-struct mpls_instr_req {
-	__u8 instr_length;
-	__u8 direction;
-	struct mpls_instr_elem instr[0];
-};
+/*2^12 - 1 (0xfff)*/
+#define MPLS_LS_MAX ((1 << 12) - 2)
+#define INACTIVE_LS (-1)
+#define DEFAULT_LS ((1 << 12) - 1)
 
 /* genetlink interface */
 enum {
@@ -184,12 +158,6 @@ enum {
 	MPLS_CMD_NEWILM,
 	MPLS_CMD_DELILM,
 	MPLS_CMD_GETILM,
-	MPLS_CMD_NEWNHLFE,
-	MPLS_CMD_DELNHLFE,
-	MPLS_CMD_GETNHLFE,
-	MPLS_CMD_NEWXC,
-	MPLS_CMD_DELXC,
-	MPLS_CMD_GETXC,
 	MPLS_CMD_SETLS,
 	MPLS_CMD_GETLS,
 	__MPLS_CMD_MAX,
@@ -198,21 +166,27 @@ enum {
 enum {
 	MPLS_ATTR_UNSPEC,
 	MPLS_ATTR_ILM,
-	MPLS_ATTR_NHLFE,
-	MPLS_ATTR_XC,
-	MPLS_ATTR_LS,
 	MPLS_ATTR_INSTR,
+	MPLS_ATTR_LS,
 	__MPLS_ATTR_MAX,
 };
 
 #define key_ls(key)																			\
-	(((__u32)(key) & ((__u32)(0xfff) << 20)) >> 20)
-#define key_label(key)																		\
-	((__u32)(key) & ((__u32)(0xfffff)))
+	((__u32)(key)->ls)
 
-#define set_key_ls(key, ls)																	\
-	(key) = (__u32)(((__u32)(key) & ~((__u32)(0xfff) << 20)) | (((ls) & (__u32)(0xfff)) << 20))
-#define set_key_label(key, label)															\
-	(key) = (__u32)(((__u32)(key) & ~((__u32)(0xfffff))) | ((label) & (__u32)(0xfffff)))
+#define key_label(key)																		\
+	((__u32)(key)->label)
+
+#define set_key_ls(key, _ls)																\
+	((key)->ls = (_ls))
+
+#define set_key_label_2(key, _label_l, _label_u)											\
+do {																						\
+	(key)->label_l = (_label_l);															\
+	(key)->label_u = (_label_u);															\
+} while(0)
+
+#define set_key_label(key, _label)															\
+	((key)->label = (_label))
 
 #endif
