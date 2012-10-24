@@ -21,8 +21,8 @@
 #include <arpa/inet.h>
 #include <string.h>
 #include <time.h>
-#include <linux/mpls.h>
 #include <linux/genetlink.h>
+#include <linux/mpls.h>
 
 #include "utils.h"
 #include "mpls.h"

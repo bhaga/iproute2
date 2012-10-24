@@ -26,6 +26,7 @@
 #ifndef _LINUX_MPLS_H_
 #define _LINUX_MPLS_H_
 
+#include <asm/byteorder.h>
 #include <linux/socket.h>
 #if defined __KERNEL__ || (!(defined __KERNEL__) && !(defined _NET_IF_H))
 #include <linux/if.h>
