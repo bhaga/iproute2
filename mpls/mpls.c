@@ -58,15 +58,12 @@ static int mpls_list(int cmd);
 
 static void usage(void)
 {
-	fprintf(stdout, "Usage: mpls CMD label [tc TC] LABEL [(labelspace | ls) NUMBER] INSTR\n");
-	fprintf(stdout, "       mpls (labelspace | ls) set DEVICE NUMBER\n");
-	fprintf(stdout, "       mpls (labelspace | ls) set DEVICE -1\n");
+	fprintf(stdout, "Usage: mpls CMD label [tc TC] LABEL INSTR\n");
 	fprintf(stdout, "       mpls tunnel add nhlfe KEY\n");
 	fprintf(stdout, "       mpls tunnel change dev NAME nhlfe KEY\n");
 	fprintf(stdout, "       mpls tunnel del dev NAME\n");
 	fprintf(stdout, "\n");
-	fprintf(stdout, "       mpls show [label LABEL [(labelspace| ls) NUMBER]]\n");
-	fprintf(stdout, "       mpls (labelspace | ls) [DEVICE]\n");
+	fprintf(stdout, "       mpls show [label [tc TC] LABEL]\n");
 	fprintf(stdout, "       mpls tunnel show [dev NAME]\n");
 	fprintf(stdout, "       mpls stats\n");
 	fprintf(stdout, "       mpls show all\n");
@@ -74,7 +71,6 @@ static void usage(void)
 	fprintf(stdout, "\n");
 	fprintf(stdout, "Where:\n");
 	fprintf(stdout, "CMD     := add | del | change\n");
-	fprintf(stdout, "NUMBER  := 0 .. 255\n");
 	fprintf(stdout, "LABEL   := 16 .. 1048575\n");
 	fprintf(stdout, "DEVICE  := dev NAME\n");
 	fprintf(stdout, "ADDR    := ipv6 or ipv4 address\n");
@@ -130,8 +126,6 @@ mpls_table_list(void)
 {
 	fprintf(stdout,"---\nMPLS entries:\n---\n");
 	mpls_list(MPLS_CMD_GETILM);
-	fprintf(stdout,"---\nLABELSPACE entries:\n---\n");
-	mpls_list(MPLS_CMD_GETLS);
 	fprintf(stdout,"---\nSTATS:\n---\n");
 	print_stats();
 
@@ -283,14 +277,7 @@ mpls_ilm_modify(int cmd, unsigned flags, int argc, char **argv)
 	ghdr->cmd = cmd;
 
 	while (argc > 0) {
-		if (strcmp(*argv, "labelspace") == 0 ||
-				strcmp(*argv, "ls") == 0) {
-			__u32 ls;
-			NEXT_ARG();
-			if (get_unsigned(&ls, *argv, 0))
-				invarg(*argv, "invalid label space");
-			set_key_ls(&mil.label, ls);
-		} else if (strcmp(*argv, "label") == 0) {
+		if (strcmp(*argv, "label") == 0) {
 			if (++got_label > 1) {
 				perror("Only one label could be set per ILM");
 				exit(1);
@@ -318,7 +305,7 @@ mpls_ilm_modify(int cmd, unsigned flags, int argc, char **argv)
 
 	mil.owner = RTPROT_STATIC;
 	addattr_l(&req.n, sizeof(req), MPLS_ATTR_ILM, &mil, sizeof(mil));
-	addattr_l(&req.n, sizeof(req), MPLS_ATTR_INSTR, instr,
+	addattr_l(&req.n, sizeof(req), MPLS_ATTR_NHLFE, instr,
 			sizeof(*instr) + instr->instr_length * sizeof(struct instr_req));
 
 	if (rtnl_talk(&rth_mpls, &req.n, 0, 0, &req.n, NULL, NULL) < 0)
@@ -326,57 +313,6 @@ mpls_ilm_modify(int cmd, unsigned flags, int argc, char **argv)
 
 	print_mpls(NULL, &req.n, stdout);
 	free(instr);
-	return 0;
-}
-
-static int
-mpls_ls_modify(int cmd, unsigned flags, int argc, char **argv)
-{
-	__u32 ls = -2;
-	struct genlmsghdr		*ghdr;
-	struct {
-		struct nlmsghdr 	n;
-		char			buf[4096];
-	} req;
-	struct ls_req ls_req;
-
-	memset(&req, 0, sizeof(req));
-	memset(&ls, 0, sizeof(ls));
-
-	req.n.nlmsg_len = NLMSG_LENGTH(GENL_HDRLEN);
-	req.n.nlmsg_flags = NLM_F_REQUEST|flags;
-	req.n.nlmsg_type = mpls_netlink_id;
-
-	ghdr = NLMSG_DATA(&req.n);
-	ghdr->cmd = cmd;
-
-	NEXT_ARG();
-	ls_req.ifindex = ll_name_to_index(*argv);
-	if (!ls_req.ifindex)
-		invarg(*argv, "invalid interface name");
-
-	if(NEXT_ARG_OK()) {
-		NEXT_ARG();
-		if (get_unsigned(&ls, *argv, 0))
-		    if (!get_integer((int*) &ls, *argv, 0) && ls != (__u32) -1)
-			invarg(*argv, "invalid labelspace");
-	} else
-		ls = 0;
-
-	ls_req.ls = ls;
-
-	if (ls_req.ifindex == 0 || ls_req.ls < -1) {
-		fprintf(stderr, "Invalid arguments\n");
-		exit(1);
-	}
-
-	addattr_l(&req.n, sizeof(req), MPLS_ATTR_LS, &ls_req, sizeof(ls_req));
-
-	if (rtnl_talk(&rth_mpls, &req.n, 0, 0, &req.n, NULL, NULL) < 0)
-		exit(2);
-
-	print_mpls(NULL, &req.n, stdout);
-
 	return 0;
 }
 
@@ -403,7 +339,7 @@ mpls_tunnel_modify(int cmd, int argc, char **argv)
 			NEXT_ARG();
 			if (get_unsigned(&key, *argv, 0))
 				invarg(*argv, "invalid NHLFE key");
-			mtr.nhlfe_key = key;
+			/*mtr.nhlfe_key = key;*/
 		} else {
 			usage();
 		}
@@ -461,7 +397,6 @@ print_label(FILE *fp, const struct ilm_key *label, __u8 tc)
 	fprintf(fp, "label %u ", key_label(label));
 	if (tc)
 		fprintf(fp, "tc %u ", tc);
-	fprintf(fp, "ls %d ", key_ls(label));
 }
 
 static void
@@ -528,7 +463,7 @@ print_ilm(int cmd, const struct nlmsghdr *n, void *arg, struct rtattr **tb)
 		fprintf(fp, "ILM entry ");
 
 	mil = RTA_DATA(tb[MPLS_ATTR_ILM]);
-	instr = RTA_DATA(tb[MPLS_ATTR_INSTR]);
+	instr = RTA_DATA(tb[MPLS_ATTR_NHLFE]);
 
 	print_label(fp, &mil->label, mil->tc);
 
@@ -539,24 +474,6 @@ print_ilm(int cmd, const struct nlmsghdr *n, void *arg, struct rtattr **tb)
 
 	fprintf(fp, "\n");
 	fflush(fp);
-	return 0;
-}
-
-int
-print_ls(int cmd, const struct nlmsghdr *n, void *arg, struct rtattr **tb)
-{
-	FILE *fp = (FILE*)arg;
-	struct ls_req *ls;
-
-	ls = RTA_DATA(tb[MPLS_ATTR_LS]);
-
-	fprintf(fp, "LABELSPACE entry ");
-
-	fprintf(fp, "dev %s ", ll_index_to_name(ls->ifindex));
-	fprintf(fp, "ls %d ",ls->ls);
-	fprintf(fp, "\n");
-	fflush(fp);
-
 	return 0;
 }
 
@@ -579,8 +496,8 @@ print_tunnel(int cmd, const struct mpls_tunnel_req *mtr, void *arg)
 		break;
 	}
 	fprintf(fp, "%s ", mtr->ifname);
-	if (cmd != SIOCDELTUNNEL)
-		fprintf(fp, "0x%08x", mtr->nhlfe_key);
+	/*if (cmd != SIOCDELTUNNEL)
+		fprintf(fp, "0x%08x", mtr->nhlfe_key);*/
 	fprintf(fp, "\n");
 
 	fflush(fp);
@@ -704,8 +621,6 @@ print_mpls(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 	case MPLS_CMD_NEWILM:
 	case MPLS_CMD_DELILM:
 		return print_ilm(ghdr->cmd, n,arg,tb);
-	case MPLS_CMD_SETLS:
-		return print_ls(ghdr->cmd, n,arg,tb);
 	default:
 		return 0;
 	}
@@ -780,22 +695,6 @@ do_ilm(int argc, char **argv)
 				"Option \"%s\" is unknown, try \"mpls --help\".\n", argv[0]);
 		return -EINVAL;
 	}
-
-	return 0;
-}
-
-static int
-do_ls(int argc, char **argv)
-{
-	if (argc <= 0 || matches(*argv, "set") != 0) {
-		if(NEXT_ARG_OK()){
-			int args;
-			args = (argc - 1 >= 3) ? 3 : argc - 1;
-			return mpls_ls_modify(MPLS_CMD_GETLS, 0, args, argv+1);
-		} else
-			return mpls_list(MPLS_CMD_GETLS);
-	} else
-			return mpls_ls_modify(MPLS_CMD_SETLS,0, argc-1, argv+1);
 
 	return 0;
 }
@@ -1009,10 +908,7 @@ int main(int argc, char **argv)
 				exit(-1);
 			}
 
-			if (matches(argv[1], "labelspace") == 0 ||
-					matches(argv[1], "ls") == 0) {
-				retval = do_ls(argc-2,argv+2);
-			} else if (matches(argv[1], "tunnel") == 0)
+			if (matches(argv[1], "tunnel") == 0)
 				retval = do_tunnel(argc-2,argv+2);
 			else if (matches(argv[1], "stats") == 0)
 				retval = print_stats();

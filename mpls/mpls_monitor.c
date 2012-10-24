@@ -67,10 +67,6 @@ int accept_msg(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 			if (ilm)
 				print_ilm(ghdr->cmd, n, arg, tb);
 			return 0;
-		case MPLS_CMD_SETLS:
-			if (ls)
-				print_ls(ghdr->cmd, n, arg, tb);
-			return 0;
 		default:
 			return -1;
 	}

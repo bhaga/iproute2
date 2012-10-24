@@ -51,12 +51,12 @@
 #define MPLS_NETLINK_NAME "nlmpls"
 #define MPLS_MC_GRP_NAME "mpls_mcast_grp"
 
-enum mpls_change {
+enum {
 	MPLS_CHANGE_MTU = 0x1,
 	MPLS_CHANGE_INSTR = (0x1 << 1),
 };
 
-enum mpls_opcode_enum {
+enum {
 	MPLS_OP_DROP = 0x00,
 	MPLS_OP_POP,
 	MPLS_OP_PEEK,
@@ -91,7 +91,7 @@ struct mpls_push {
 #error	"Please fix <asm/byteorder.h>"
 #endif
 	__u8 tc:3;
-	__u16 pad:9;
+	__u16 __pad:9;
 };
 
 struct ilm_key {
@@ -106,11 +106,11 @@ struct ilm_key {
 #else
 #error	"Please fix <asm/byteorder.h>"
 #endif
-			__u32 __pad:12;
+			__u32 __pad1:12;
 		};
 		struct {
 			__u32 label:20;
-			__u16 ls:12;
+			__u16 __pad2:12;
 		};
 	};
 };
@@ -128,9 +128,10 @@ struct instr_req {
 
 struct ilm_req {
 	struct ilm_key label;
-	__u8 change_flag;
 	__u8 tc;
 	__u8 owner;   /* Routing protocol */
+	__u8 change_flag;
+	__u8 __pad;
 };
 
 struct nhlfe_req {
@@ -138,20 +139,9 @@ struct nhlfe_req {
 	struct instr_req instr[0];
 };
 
-struct ls_req {
-	int ifindex;
-	int ls;
-};
-
 struct mpls_tunnel_req {
 	char ifname[IFNAMSIZ];
-	__u32 nhlfe_key;
 };
-
-/*2^12 - 1 (0xfff)*/
-#define MPLS_LS_MAX ((1 << 12) - 2)
-#define INACTIVE_LS (-1)
-#define DEFAULT_LS ((1 << 12) - 1)
 
 /* genetlink interface */
 enum {
@@ -159,27 +149,19 @@ enum {
 	MPLS_CMD_NEWILM,
 	MPLS_CMD_DELILM,
 	MPLS_CMD_GETILM,
-	MPLS_CMD_SETLS,
-	MPLS_CMD_GETLS,
 	__MPLS_CMD_MAX,
 };
 
 enum {
 	MPLS_ATTR_UNSPEC,
+	MPLS_ATTR_DEV,
 	MPLS_ATTR_ILM,
-	MPLS_ATTR_INSTR,
-	MPLS_ATTR_LS,
+	MPLS_ATTR_NHLFE,
 	__MPLS_ATTR_MAX,
 };
 
-#define key_ls(key)																			\
-	((__u32)(key)->ls)
-
 #define key_label(key)																		\
 	((__u32)(key)->label)
-
-#define set_key_ls(key, _ls)																\
-	((key)->ls = (_ls))
 
 #define set_key_label_2(key, _label_l, _label_u)											\
 do {																						\
