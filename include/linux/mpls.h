@@ -28,6 +28,7 @@
 
 #include <asm/byteorder.h>
 #include <linux/socket.h>
+#include <linux/rtnetlink.h>
 #if defined __KERNEL__ || (!(defined __KERNEL__) && !(defined _NET_IF_H))
 #include <linux/if.h>
 #else
@@ -45,31 +46,10 @@
 
 #define MPLS_LINUX_VERSION (0x01090100)
 
-/*based on netlink_group_mask from net/netlink/af_netlink.c */
-#define _group_mask(group_id) ((group_id) ? 1 << ((group_id) - 1) : 0)
-
-#define MPLS_NETLINK_NAME "nlmpls"
-#define MPLS_MC_GRP_NAME "mpls_mcast_grp"
-
-enum {
-	MPLS_CHANGE_MTU = 0x1,
-	MPLS_CHANGE_INSTR = (0x1 << 1),
-};
-
-enum {
-	MPLS_OP_DROP = 0x00,
-	MPLS_OP_POP,
-	MPLS_OP_PEEK,
-	MPLS_OP_PUSH,
-	MPLS_OP_SWAP,
-	MPLS_OP_SEND_IPv4,
-	MPLS_OP_SEND_IPv6,
-	MPLS_OP_SET_TC_INDEX,
-	MPLS_OP_SET_DS,
-	__MPLS_OP_MAX
-};
-
 #define MPLS_HDR_LEN (sizeof(u32))
+
+#define TC_MAX ((1 << 3) - 1)
+#define DSCP_MAX ((1 << 8) - 1)
 
 struct mpls_nh {
 	__u32 iface;
@@ -80,96 +60,54 @@ struct mpls_nh {
 	};
 };
 
-struct mpls_push {
-#if defined(__LITTLE_ENDIAN_BITFIELD)
-	__u32 label_u:4;
-	__u32 label_l:16;
-#elif defined (__BIG_ENDIAN_BITFIELD)
-	__u32 label_l:16;
-	__u32 label_u:4;
-#else
-#error	"Please fix <asm/byteorder.h>"
-#endif
+struct mpls_key {
+	__u32 label:20;
 	__u8 tc:3;
 	__u16 __pad:9;
 };
 
-struct ilm_key {
+struct ilmsg {
 	union {
 		struct {
-#if defined(__LITTLE_ENDIAN_BITFIELD)
-			__u32 label_u:4;
-			__u32 label_l:16;
-#elif defined (__BIG_ENDIAN_BITFIELD)
-			__u32 label_l:16;
-			__u32 label_u:4;
-#else
-#error	"Please fix <asm/byteorder.h>"
-#endif
-			__u32 __pad1:12;
+			__u8 family;
+			__u8 tc;
+			__u8 owner;   /* Routing protocol */
+			struct mpls_key key;
 		};
-		struct {
-			__u32 label:20;
-			__u16 __pad2:12;
-		};
+		/* padding to pass rtnetlink min_len check */
+		struct rtmsg __pad;
 	};
 };
 
-struct instr_req {
-	__u16 opcode;
-	union {
-		struct mpls_push push;
-		__u16 pop;
-		__u16 tc_index;
-		__u16 dscp;
-		struct mpls_nh nh;
-	};
-};
-
-struct ilm_req {
-	struct ilm_key label;
-	__u8 tc;
-	__u8 owner;   /* Routing protocol */
-	__u8 change_flag;
-	__u8 __pad;
-};
-
-struct nhlfe_req {
-	__u8 instr_length;
-	struct instr_req instr[0];
-};
-
-struct mpls_tunnel_req {
-	char ifname[IFNAMSIZ];
-};
-
-/* genetlink interface */
 enum {
-	MPLS_CMD_UNSPEC,
-	MPLS_CMD_NEWILM,
-	MPLS_CMD_DELILM,
-	MPLS_CMD_GETILM,
-	__MPLS_CMD_MAX,
+	MPLS_ATTR_PUSH_UNSPEC,
+	MPLS_PUSH_1,
+	MPLS_PUSH_2,
+	MPLS_PUSH_3,
+	MPLS_PUSH_4,
+	MPLS_PUSH_5,
+	MPLS_PUSH_6,
+	MPLS_NO_PUSHES,
+#define MPLS_PUSH_MAX MPLS_NO_PUSHES
+	__MPLS_ATTR_PUSH_MAX,
 };
+#define MPLS_ATTR_PUSH_MAX (__MPLS_ATTR_PUSH_MAX - 1)
 
 enum {
 	MPLS_ATTR_UNSPEC,
-	MPLS_ATTR_DEV,
-	MPLS_ATTR_ILM,
-	MPLS_ATTR_NHLFE,
+	MPLS_ATTR_POP,
+	MPLS_ATTR_DSCP,
+	MPLS_ATTR_TC_INDEX,
+	MPLS_ATTR_SWAP,
+	MPLS_ATTR_PUSH,
+	MPLS_ATTR_PEEK, /* must be last instruction */
+	MPLS_ATTR_DROP, /* must be last instruction */
+	MPLS_ATTR_SEND_IPv4, /* must be last instruction */
+	MPLS_ATTR_SEND_IPv6, /* must be last instruction */
+	MPLS_ATTR_INSTR_COUNT, /* not a instruction */
+#define MPLS_ATTR_INSTR_MAX MPLS_ATTR_INSTR_COUNT
 	__MPLS_ATTR_MAX,
 };
-
-#define key_label(key)																		\
-	((__u32)(key)->label)
-
-#define set_key_label_2(key, _label_l, _label_u)											\
-do {																						\
-	(key)->label_l = (_label_l);															\
-	(key)->label_u = (_label_u);															\
-} while(0)
-
-#define set_key_label(key, _label)															\
-	((key)->label = (_label))
+#define MPLS_ATTR_MAX (__MPLS_ATTR_MAX - 1)
 
 #endif

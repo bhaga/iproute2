@@ -24,7 +24,6 @@
 #include <arpa/inet.h>
 #include <linux/in_route.h>
 #include <errno.h>
-#include <linux/shim.h>
 
 #include "rt_names.h"
 #include "utils.h"
@@ -114,7 +113,6 @@ static struct
 	inet_prefix mdst;
 	inet_prefix rsrc;
 	inet_prefix msrc;
-	unsigned int mpls;
 } filter;
 
 static int flush_update(void)
@@ -255,13 +253,6 @@ int filter_nlmsg(struct nlmsghdr *n, struct rtattr **tb, int host_len)
 		if ((mark ^ filter.mark) & filter.markmask)
 			return 0;
 	}
-	if (filter.mpls) {
-		struct rtshim *shim = NULL;
-		if (tb[RTA_SHIM])
-		shim = RTA_DATA(tb[RTA_SHIM]);
-		if (shim && !memcmp(&filter.mpls, shim->data, shim->datalen)) 
-			return 0;
-	}
 	if (filter.flushb &&
 	    r->rtm_family == AF_INET6 &&
 	    r->rtm_dst_len == 0 &&
@@ -394,16 +385,7 @@ int print_route(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 	}
 	if (tb[RTA_OIF] && filter.oifmask != -1)
 		fprintf(fp, "dev %s ", ll_index_to_name(*(int*)RTA_DATA(tb[RTA_OIF])));
-	
-	if (tb[RTA_SHIM]) {
-	struct rtshim *shim;
 
-	shim = RTA_DATA(tb[RTA_SHIM]);
-	unsigned int key;
-	memcpy(&key, shim->data, 4);
-	fprintf(fp, "mpls 0x%x", key);
-	}
-	
 	if (!(r->rtm_flags&RTM_F_CLONED)) {
 		if (table != RT_TABLE_MAIN && !filter.tb)
 			fprintf(fp, " table %s ", rtnl_rttable_n2a(table, b1, sizeof(b1)));
@@ -674,22 +656,6 @@ int parse_one_nh(struct rtattr *rta, struct rtnexthop *rtnh, int *argcp, char **
 				invarg("\"realm\" value is invalid\n", *argv);
 			rta_addattr32(rta, 4096, RTA_FLOW, realm);
 			rtnh->rtnh_len += sizeof(struct rtattr) + 4;
-		} else if (strcmp(*argv, "mpls") == 0) {
-			char buf[sizeof(struct rtshim) + sizeof(unsigned int)];
-			struct rtshim *shim = (struct rtshim *)buf;
-			unsigned int key;
-
-			NEXT_ARG();
-			if (get_unsigned(&key, *argv, 0))
-			invarg("\"mpls key\" is invalid\n", *argv);
-
-			memcpy(shim->data, &key, sizeof(unsigned int));
-			shim->datalen = sizeof(unsigned int);
-
-			rta_addattr_l(rta, 4096, RTA_SHIM, shim,
-				sizeof(struct rtshim) + sizeof(unsigned int));
-			rtnh->rtnh_len += sizeof(struct rtattr) +
-				sizeof(struct rtshim) + sizeof(unsigned int);
 		} else
 			break;
 	}
@@ -782,18 +748,6 @@ int iproute_modify(int cmd, unsigned flags, int argc, char **argv)
 			if (req.r.rtm_family == AF_UNSPEC)
 				req.r.rtm_family = addr.family;
 			addattr_l(&req.n, sizeof(req), RTA_GATEWAY, &addr.data, addr.bytelen);
-		} else if (strcmp(*argv, "mpls") == 0) {
-			char buf[sizeof(struct rtshim) + sizeof(unsigned int)];
-			struct rtshim *shim = (struct rtshim *)buf;
-			unsigned int key;
-
-			NEXT_ARG();
-			if (get_unsigned(&key, *argv, 0))
-				invarg("\"mpls key\" is invalid\n", *argv);
-			memcpy(shim->data, &key, sizeof(unsigned int));
-			shim->datalen = sizeof(unsigned int);
-			addattr_l(&req.n, sizeof(req), RTA_SHIM, shim,
-				sizeof(struct rtshim) + sizeof(unsigned int));
 		} else if (strcmp(*argv, "from") == 0) {
 			inet_prefix addr;
 			NEXT_ARG();
@@ -874,7 +828,7 @@ int iproute_modify(int cmd, unsigned flags, int argc, char **argv)
 			}
 			if (get_time_rtt(&rtt, *argv, &raw))
 				invarg("\"rtt\" value is invalid\n", *argv);
-			rta_addattr32(mxrta, sizeof(mxbuf), RTAX_RTT, 
+			rta_addattr32(mxrta, sizeof(mxbuf), RTAX_RTT,
 				(raw) ? rtt : rtt * 8);
 		} else if (strcmp(*argv, "rto_min") == 0) {
 			unsigned rto_min;
@@ -1233,12 +1187,6 @@ static int iproute_list_flush_or_save(int argc, char **argv, int action)
 		} else if (strcmp(*argv, "src") == 0) {
 			NEXT_ARG();
 			get_prefix(&filter.rprefsrc, *argv, do_ipv6);
-		} else if (matches(*argv, "mpls") == 0) {
-			unsigned int key;
-			NEXT_ARG();
-			if (get_unsigned(&key, *argv, 0))
-				invarg("\"mpls key\" is invalid\n", *argv);
-			filter.mpls = key;
 		} else if (matches(*argv, "realms") == 0) {
 			__u32 realm;
 			NEXT_ARG();
@@ -1453,20 +1401,6 @@ int iproute_get(int argc, char **argv)
 			   strcmp(*argv, "dev") == 0) {
 			NEXT_ARG();
 			odev = *argv;
-		} else if (matches(*argv, "mpls") == 0) {
-			char buf[sizeof(struct rtshim) + sizeof(unsigned int)];
-			struct rtshim *shim = (struct rtshim *)buf;
-			unsigned int key;
-
-			NEXT_ARG();
-			if (get_unsigned(&key, *argv, 0))
-				invarg("\"mpls key\" is invalid\n", *argv);
-
-			memcpy(shim->data, &key, sizeof(unsigned int));
-			shim->datalen = sizeof(unsigned int);
-
-			addattr_l(&req.n, sizeof(req), RTA_SHIM, shim,
-				sizeof(struct rtshim) + sizeof(unsigned int));
 		} else if (matches(*argv, "notify") == 0) {
 			req.r.rtm_flags |= RTM_F_NOTIFY;
 		} else if (matches(*argv, "connected") == 0) {
@@ -1553,8 +1487,6 @@ int iproute_get(int argc, char **argv)
 		}
 		if (!odev && tb[RTA_OIF])
 			tb[RTA_OIF]->rta_type = 0;
-		if (tb[RTA_SHIM])
-			tb[RTA_SHIM]->rta_type = 0;
 		if (tb[RTA_GATEWAY])
 			tb[RTA_GATEWAY]->rta_type = 0;
 		if (!idev && tb[RTA_IIF])

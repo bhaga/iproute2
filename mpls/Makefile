@@ -1,4 +1,4 @@
-MPLSOBJ=mpls.o mpls_monitor.o
+MPLSOBJ=mpls.o
 
 include ../Config
 
