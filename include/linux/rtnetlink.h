@@ -1,5 +1,5 @@
-#ifndef __LINUX_RTNETLINK_H
-#define __LINUX_RTNETLINK_H
+#ifndef _UAPI__LINUX_RTNETLINK_H
+#define _UAPI__LINUX_RTNETLINK_H
 
 #include <linux/types.h>
 #include <linux/netlink.h>
@@ -283,7 +283,7 @@ enum rtattr_type_t {
 	RTA_MP_ALGO, /* no longer used */
 	RTA_TABLE,
 	RTA_MARK,
-	RTA_SHIM,
+	RTA_MPLS,
 	__RTA_MAX
 };
 
@@ -517,6 +517,7 @@ enum {
 
 #define NDUSEROPT_MAX	(__NDUSEROPT_MAX - 1)
 
+#ifndef __KERNEL__
 /* RTnetlink multicast groups - backwards compatibility for userspace */
 #define RTMGRP_LINK		1
 #define RTMGRP_NOTIFY		2
@@ -537,6 +538,7 @@ enum {
 #define RTMGRP_DECnet_ROUTE     0x4000
 
 #define RTMGRP_IPV6_PREFIX	0x20000
+#endif
 
 /* RTnetlink multicast groups */
 enum rtnetlink_groups {
@@ -587,7 +589,7 @@ enum rtnetlink_groups {
 	RTNLGRP_DCB,
 #define RTNLGRP_DCB		RTNLGRP_DCB
 	RTNLGRP_MPLS,
-#define	RTNLGRP_MPLS	RTNLGRP_MPLS
+#define RTNLGRP_MPLS		RTNLGRP_MPLS
 	__RTNLGRP_MAX
 };
 #define RTNLGRP_MAX	(__RTNLGRP_MAX - 1)
@@ -603,8 +605,11 @@ struct tcamsg {
 #define TCA_ACT_TAB 1 /* attr type must be >=1 */
 #define TCAA_MAX 1
 
+/* New extended info filters for IFLA_EXT_MASK */
+#define RTEXT_FILTER_VF		(1 << 0)
+
 /* End of information exported to user level */
 
 
 
-#endif	/* __LINUX_RTNETLINK_H */
+#endif /* _UAPI__LINUX_RTNETLINK_H */
