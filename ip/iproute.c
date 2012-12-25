@@ -23,11 +23,13 @@
 #include <netinet/ip.h>
 #include <arpa/inet.h>
 #include <linux/in_route.h>
+#include <linux/mpls.h>
 #include <errno.h>
 
 #include "rt_names.h"
 #include "utils.h"
 #include "ip_common.h"
+#include "../mpls/mpls.h"
 
 #ifndef RTAX_RTTVAR
 #define RTAX_RTTVAR RTAX_HOPS
@@ -73,7 +75,7 @@ static void usage(void)
 	fprintf(stderr, "             [ scope SCOPE ] [ metric METRIC ]\n");
 	fprintf(stderr, "INFO_SPEC := NH OPTIONS FLAGS [ nexthop NH ]...\n");
 	fprintf(stderr, "NH := [ via ADDRESS ] [ dev STRING ] [ weight NUMBER ] \n");
-	fprintf(stderr, "      [ mpls NUMBER ] NHFLAGS\n");
+	fprintf(stderr, "      [ mpls M_INSTRUCTIONS ] NHFLAGS\n");
 	fprintf(stderr, "OPTIONS := FLAGS [ mtu NUMBER ] [ advmss NUMBER ]\n");
 	fprintf(stderr, "           [ rtt TIME ] [ rttvar TIME ] [reordering NUMBER ]\n");
 	fprintf(stderr, "           [ window NUMBER] [ cwnd NUMBER ] [ initcwnd NUMBER ]\n");
@@ -383,8 +385,16 @@ int print_route(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 				    RTA_DATA(tb[RTA_GATEWAY]),
 				    abuf, sizeof(abuf)));
 	}
+
 	if (tb[RTA_OIF] && filter.oifmask != -1)
 		fprintf(fp, "dev %s ", ll_index_to_name(*(int*)RTA_DATA(tb[RTA_OIF])));
+
+	if (tb[RTA_MPLS]) {
+		struct rtattr *data[MPLS_ATTR_MAX + 1];
+		parse_rtattr_nested(data, MPLS_ATTR_MAX, tb[RTA_MPLS]);
+		fprintf(fp, "mpls ");
+		print_instructions(fp, data);
+	}
 
 	if (!(r->rtm_flags&RTM_F_CLONED)) {
 		if (table != RT_TABLE_MAIN && !filter.tb)
@@ -601,6 +611,12 @@ int print_route(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 					fprintf(fp, "%s",
 						rtnl_rtrealm_n2a(to, b1, sizeof(b1)));
 				}
+				if (tb[RTA_MPLS]) {
+					struct rtattr *data[MPLS_ATTR_MAX + 1];
+					parse_rtattr_nested(data, MPLS_ATTR_MAX, tb[RTA_MPLS]);
+					fprintf(fp, " mpls ");
+					print_instructions(fp, data);
+				}
 			}
 			if (r->rtm_flags&RTM_F_CLONED && r->rtm_type == RTN_MULTICAST) {
 				fprintf(fp, " %s", ll_index_to_name(nh->rtnh_ifindex));
@@ -629,10 +645,15 @@ int parse_one_nh(struct rtattr *rta, struct rtnexthop *rtnh, int *argcp, char **
 {
 	int argc = *argcp;
 	char **argv = *argvp;
+	int mpls = 0;
+	int ip = 0;
 
 	while (++argv, --argc > 0) {
 		if (strcmp(*argv, "via") == 0) {
+			if (mpls)
+				invarg("Can't define via when using MPLS forwarding", *argv);
 			NEXT_ARG();
+			ip = 1;
 			rta_addattr32(rta, 4096, RTA_GATEWAY, get_addr32(*argv));
 			rtnh->rtnh_len += sizeof(struct rtattr) + 4;
 		} else if (strcmp(*argv, "dev") == 0) {
@@ -641,6 +662,31 @@ int parse_one_nh(struct rtattr *rta, struct rtnexthop *rtnh, int *argcp, char **
 				fprintf(stderr, "Cannot find device \"%s\"\n", *argv);
 				exit(1);
 			}
+			if (mpls) {
+				if (strcmp(MPLS_MASTER_DEV, *argv) != 0)
+					invarg("Can't use dev different from mpls0 when using MPLS forwarding", *argv);
+			} else if (strcmp(MPLS_MASTER_DEV, *argv) == 0)
+				mpls = 1;
+			else
+				ip = 1;
+		} else if (strcmp(*argv, "mpls") == 0) {
+			struct rtattr *mpls_info;
+			int len = rta->rta_len;
+
+			if (ip)
+				invarg("Can't define mpls when using IP forwarding", *argv);
+			NEXT_ARG();
+			mpls = 1;
+
+			if ((rtnh->rtnh_ifindex = ll_name_to_index(MPLS_MASTER_DEV)) == 0) {
+				fprintf(stderr, "Cannot find MPLS master device \"%s\"\n", MPLS_MASTER_DEV);
+				exit(-1);
+			}
+
+			mpls_info = rta_addattr_nest(rta, 4096, RTA_MPLS);
+			parse_instr(rta, NULL, 4096, &argc, &argv);
+			len = rta_addattr_nest_end(rta, mpls_info) - len;
+			rtnh->rtnh_len += len;
 		} else if (strcmp(*argv, "weight") == 0) {
 			unsigned w;
 			NEXT_ARG();
@@ -713,6 +759,8 @@ int iproute_modify(int cmd, unsigned flags, int argc, char **argv)
 	int scope_ok = 0;
 	int table_ok = 0;
 	int raw = 0;
+	int ip = 0;
+	int mpls = 0;
 
 	memset(&req, 0, sizeof(req));
 
@@ -743,6 +791,9 @@ int iproute_modify(int cmd, unsigned flags, int argc, char **argv)
 		} else if (strcmp(*argv, "via") == 0) {
 			inet_prefix addr;
 			gw_ok = 1;
+			if (mpls)
+				invarg("Can't define via when using MPLS forwarding", *argv);
+			ip = 1;
 			NEXT_ARG();
 			get_addr(&addr, *argv, req.r.rtm_family);
 			if (req.r.rtm_family == AF_UNSPEC)
@@ -929,9 +980,31 @@ int iproute_modify(int cmd, unsigned flags, int argc, char **argv)
 				addattr32(&req.n, sizeof(req), RTA_TABLE, tid);
 			}
 			table_ok = 1;
+		} else if (strcmp(*argv, "mpls") == 0) {
+			struct rtattr *mpls_info;
+
+			if (ip)
+				invarg("Can't define mpls when using IP forwarding", *argv);
+			mpls = 1;
+			gw_ok = 1;
+			d = MPLS_MASTER_DEV;
+
+			NEXT_ARG();
+
+			mpls_info = addattr_nest(&req.n, sizeof(req), RTA_MPLS);
+			parse_instr(NULL, &req.n, sizeof(req), &argc, &argv);
+			addattr_nest_end(&req.n, mpls_info);
+
 		} else if (strcmp(*argv, "dev") == 0 ||
 			   strcmp(*argv, "oif") == 0) {
 			NEXT_ARG();
+			if (mpls) {
+				if (strcmp(MPLS_MASTER_DEV, *argv) != 0)
+					invarg("Can't use dev different from mpls0 when using MPLS forwarding", *argv);
+			} else if (strcmp(MPLS_MASTER_DEV, *argv) == 0)
+				mpls = 1;
+			else
+				ip = 1;
 			d = *argv;
 		} else {
 			int type;

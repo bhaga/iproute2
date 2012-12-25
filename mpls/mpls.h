@@ -58,8 +58,8 @@ mpls_parse_label(struct mpls_key *label, char *err, int *pargc, char ***pargv)
 	return 0;
 }
 
-static void
-parse_instr(struct nlmsghdr *nlh, size_t req_size, int *pargc, char ***pargv)
+static int
+parse_instr(struct rtattr *rta, struct nlmsghdr *nlh, size_t req_size, int *pargc, char ***pargv)
 {
 	int argc = *pargc;
 	char **argv = *pargv;
@@ -68,36 +68,51 @@ parse_instr(struct nlmsghdr *nlh, size_t req_size, int *pargc, char ***pargv)
 	__u32 pop;
 	__u32 dscp;
 	__u32 tc_index;
+	int nh_is_set = 0;
+	int ret = 0;
 	struct mpls_nh nh = {0};
+
+	if ((nlh && rta) || (!nlh && !rta)) {
+		fprintf(stderr, "BUG in function %s on line %d: "
+						"rta and nlh can't be different from "
+						"or equal to NULL in the same time!\n", __func__, __LINE__);
+		exit(-1);
+	}
+
 	while (argc > 0) {
 		if (strcmp(*argv, "swap") == 0) {
-			struct mpls_key swap = {{0}};
+			struct mpls_key swap = { .label = 0, };
 			char err[20];
 			NEXT_ARG();
 			if (mpls_parse_label(&swap, err, &argc, &argv))
 				invarg(*argv, err);
 
-			addattr_l(nlh, req_size, MPLS_ATTR_SWAP, &swap, sizeof(struct mpls_key));
+			nlh ? addattr_l(nlh, req_size, MPLS_ATTR_SWAP, &swap, sizeof(struct mpls_key)) :
+					rta_addattr_l(rta, req_size, MPLS_ATTR_SWAP, &swap, sizeof(struct mpls_key));
 		} else if (strcmp(*argv, "push") == 0) {
 			char err[20];
 			struct rtattr *push_info;
-			struct mpls_key push = {{0}};
+			struct mpls_key push = { .label = 0, };
 			if (no_push) {
 				duparg("push", *argv);
 				exit(-1);
 			}
 			NEXT_ARG();
-			push_info = addattr_nest(nlh, req_size, MPLS_ATTR_PUSH);
+			push_info = nlh ? addattr_nest(nlh, req_size, MPLS_ATTR_PUSH) :
+					rta_addattr_nest(rta, req_size, MPLS_ATTR_PUSH);
 
 			while(!mpls_parse_label(&push, err, &argc, &argv)) {
-				addattr_l(nlh, req_size, MPLS_PUSH_1 + no_push, &push, sizeof(struct mpls_key));
+				nlh ? addattr_l(nlh, req_size, MPLS_PUSH_1 + no_push, &push, sizeof(struct mpls_key)) :
+					rta_addattr_l(rta, req_size, MPLS_PUSH_1 + no_push, &push, sizeof(struct mpls_key));
 				if (++no_push > MPLS_PUSH_MAX - 1)
 					invarg(*argv, "invalid number of pushes");
 				NEXT_ARG();
 			}
 			PREV_ARG();
-			addattr_l(nlh, req_size, MPLS_NO_PUSHES, &no_push, sizeof(__u8));
-			addattr_nest_end(nlh, push_info);
+			nlh ? addattr_l(nlh, req_size, MPLS_NO_PUSHES, &no_push, sizeof(__u8)) :
+				rta_addattr_l(rta, req_size, MPLS_NO_PUSHES, &no_push, sizeof(__u8));
+			nlh ? addattr_nest_end(nlh, push_info) :
+				rta_addattr_nest_end(rta, push_info);
 			if (no_push == 0)
 				invarg(*argv, "invalid number of pushes");
 		} else if (strcmp(*argv, "pop") == 0) {
@@ -105,24 +120,34 @@ parse_instr(struct nlmsghdr *nlh, size_t req_size, int *pargc, char ***pargv)
 			if (get_unsigned(&pop, *argv, 0))
 				invarg(*argv, "invalid number of pops");
 
-			addattr_l(nlh, req_size, MPLS_ATTR_POP, &pop, sizeof(__u8));
+			nlh ? addattr_l(nlh, req_size, MPLS_ATTR_POP, &pop, sizeof(__u8)) :
+				rta_addattr_l(rta, req_size, MPLS_ATTR_POP, &pop, sizeof(__u8));
 		} else if (strcmp(*argv, "peek") == 0) {
-			addattr_l(nlh, req_size, MPLS_ATTR_PEEK, NULL, 0);
+			nlh ? addattr_l(nlh, req_size, MPLS_ATTR_PEEK, NULL, 0) :
+				rta_addattr_l(rta, req_size, MPLS_ATTR_PEEK, NULL, 0);
 		}  else if (strcmp(*argv, "dscp") == 0) {
 			NEXT_ARG();
 			if (get_unsigned(&dscp, *argv, 0))
 				invarg(*argv, "invalid DSCP");
 
-			addattr_l(nlh, req_size, MPLS_ATTR_DSCP, &dscp, sizeof(__u8));
+			nlh ? addattr_l(nlh, req_size, MPLS_ATTR_DSCP, &dscp, sizeof(__u8)) :
+				rta_addattr_l(rta, req_size, MPLS_ATTR_DSCP, &dscp, sizeof(__u8));
 		} else if (strcmp(*argv, "tc_index") == 0) {
 			NEXT_ARG();
 			if (get_unsigned(&tc_index, *argv, 0))
 				invarg(*argv, "invalid TC_INDEX");
 
-			addattr_l(nlh, req_size, MPLS_ATTR_TC_INDEX, &tc_index, sizeof(__u16));
+			nlh ? addattr_l(nlh, req_size, MPLS_ATTR_TC_INDEX, &tc_index, sizeof(__u16)) :
+				rta_addattr_l(rta, req_size, MPLS_ATTR_TC_INDEX, &tc_index, sizeof(__u16));
 		} else {
 			inet_prefix addr;
 			int cmd;
+
+			if (nh_is_set) {
+				ret = -1;
+				PREV_ARG();
+				goto exit;
+			}
 
 			if (strcmp(*argv, "dev") == 0) {
 				NEXT_ARG();
@@ -138,26 +163,37 @@ parse_instr(struct nlmsghdr *nlh, size_t req_size, int *pargc, char ***pargv)
 				case AF_INET:
 					cmd = MPLS_ATTR_SEND_IPv4;
 					nh.ipv4.sin_family = AF_INET;
+					nh_is_set = 1;
 					memcpy(&nh.ipv4.sin_addr, &addr.data, addr.bytelen);
 					break;
 				case AF_INET6:
 					cmd = MPLS_ATTR_SEND_IPv6;
 					nh.ipv6.sin6_family = AF_INET6;
+					nh_is_set = 1;
 					memcpy(&nh.ipv6.sin6_addr, &addr.data, addr.bytelen);
 					break;
 				default:
 					invarg(*argv, "invalid nexthop type");
 				}
-			} else {
-				invarg(*argv, "invalid nexthop type");
-			}
-			addattr_l(nlh, req_size, cmd, &nh, sizeof(struct mpls_nh));
+			} else if (nh.iface != 0) {
+				invarg(*argv, "invalid nexthop");
+			} else if (nh_is_set) {
+				ret = -1;
+				PREV_ARG();
+				goto exit;
+			} else
+				invarg(*argv, "invalid nexthop");
+			nlh ? addattr_l(nlh, req_size, cmd, &nh, sizeof(struct mpls_nh)) :
+				rta_addattr_l(rta, req_size, cmd, &nh, sizeof(struct mpls_nh));
 		}
 		argc--; argv++; c++;
 	}
-	addattr_l(nlh, req_size, MPLS_ATTR_INSTR_COUNT, &c, sizeof(__u8));
+exit:
+	nlh ? addattr_l(nlh, req_size, MPLS_ATTR_INSTR_COUNT, &c, sizeof(__u8)) :
+		rta_addattr_l(rta, req_size, MPLS_ATTR_INSTR_COUNT, &c, sizeof(__u8));
 	*pargc = argc;
 	*pargv = argv;
+	return ret;
 }
 
 static void

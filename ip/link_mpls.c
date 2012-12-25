@@ -44,7 +44,8 @@ static int mpls_parse_opt(struct link_util *lu, int argc, char **argv,
 	if (argc > 0) {
 		if (strcmp(*argv, "help") == 0)
 			usage();
-		parse_instr(n, 1024, &argc, &argv);
+		if (parse_instr(NULL, n, 1024, &argc, &argv))
+			invarg(*argv, "invalid nexthop type");
 	} else
 		usage();
 
