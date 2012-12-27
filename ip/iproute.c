@@ -648,21 +648,42 @@ int print_route(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
 	return 0;
 }
 
-int parse_one_nh(struct rtattr *rta, struct rtnexthop *rtnh, int *argcp, char ***argvp)
+static struct rtnexthop *addnexthop(struct nlmsghdr *n, int maxlen)
 {
+	const int len = sizeof(struct rtnexthop);
+	struct rtnexthop *rtnh = (struct rtnexthop *) ((void *) n + RTNH_ALIGN(n->nlmsg_len));
+
+	if (RTNH_ALIGN(n->nlmsg_len) + len > maxlen) {
+		fprintf(stderr, "addnexthop ERROR: message exceeded bound of %d\n", maxlen);
+		return NULL;
+	}
+	memset(rtnh, 0, sizeof(*rtnh));
+	n->nlmsg_len = RTNH_ALIGN(n->nlmsg_len) + len;
+	return rtnh;
+}
+
+static int addnexthop_end(struct nlmsghdr *n, struct rtnexthop *nest)
+{
+	nest->rtnh_len = (void *) n + n->nlmsg_len - (void *)nest;
+	return n->nlmsg_len;
+}
+
+int parse_one_nh(struct nlmsghdr *n, int maxlen, int *argcp, char ***argvp)
+{
+	struct rtnexthop *rtnh;
 	int argc = *argcp;
 	char **argv = *argvp;
 	int mpls = 0;
 	int ip = 0;
 
+	rtnh = addnexthop(n, maxlen);
 	while (++argv, --argc > 0) {
 		if (strcmp(*argv, "via") == 0) {
 			if (mpls)
 				invarg("Can't define via when using MPLS forwarding", *argv);
 			NEXT_ARG();
 			ip = 1;
-			rta_addattr32(rta, 4096, RTA_GATEWAY, get_addr32(*argv));
-			rtnh->rtnh_len += sizeof(struct rtattr) + 4;
+			addattr32(n, maxlen, RTA_GATEWAY, get_addr32(*argv));
 		} else if (strcmp(*argv, "dev") == 0) {
 			NEXT_ARG();
 			if ((rtnh->rtnh_ifindex = ll_name_to_index(*argv)) == 0) {
@@ -678,7 +699,6 @@ int parse_one_nh(struct rtattr *rta, struct rtnexthop *rtnh, int *argcp, char **
 				ip = 1;
 		} else if (strcmp(*argv, "mpls") == 0) {
 			struct rtattr *mpls_info;
-			int len = rta->rta_len;
 
 			if (ip)
 				invarg("Can't define mpls when using IP forwarding", *argv);
@@ -690,10 +710,9 @@ int parse_one_nh(struct rtattr *rta, struct rtnexthop *rtnh, int *argcp, char **
 				exit(-1);
 			}
 
-			mpls_info = rta_addattr_nest(rta, 4096, RTA_MPLS);
-			parse_instr(rta, NULL, 4096, &argc, &argv);
-			len = rta_addattr_nest_end(rta, mpls_info) - len;
-			rtnh->rtnh_len += len;
+			mpls_info = addattr_nest(n, maxlen, RTA_MPLS);
+			parse_instr(NULL, n, maxlen, &argc, &argv);
+			addattr_nest_end(n, mpls_info);
 		} else if (strcmp(*argv, "weight") == 0) {
 			unsigned w;
 			NEXT_ARG();
@@ -707,26 +726,22 @@ int parse_one_nh(struct rtattr *rta, struct rtnexthop *rtnh, int *argcp, char **
 			NEXT_ARG();
 			if (get_rt_realms(&realm, *argv))
 				invarg("\"realm\" value is invalid\n", *argv);
-			rta_addattr32(rta, 4096, RTA_FLOW, realm);
-			rtnh->rtnh_len += sizeof(struct rtattr) + 4;
+			addattr32(n, maxlen, RTA_FLOW, realm);
 		} else
 			break;
 	}
+	addnexthop_end(n, rtnh);
+
 	*argcp = argc;
 	*argvp = argv;
 	return 0;
 }
 
-int parse_nexthops(struct nlmsghdr *n, struct rtmsg *r, int argc, char **argv)
+int parse_nexthops(struct nlmsghdr *n, size_t maxlen, int argc, char **argv)
 {
-	char buf[1024];
-	struct rtattr *rta = (void*)buf;
-	struct rtnexthop *rtnh;
+	struct rtattr *rta;
 
-	rta->rta_type = RTA_MULTIPATH;
-	rta->rta_len = RTA_LENGTH(0);
-	rtnh = RTA_DATA(rta);
-
+	rta = addattr_nest(n, maxlen, RTA_MULTIPATH);
 	while (argc > 0) {
 		if (strcmp(*argv, "nexthop") != 0) {
 			fprintf(stderr, "Error: \"nexthop\" or end of line is expected instead of \"%s\"\n", *argv);
@@ -736,15 +751,10 @@ int parse_nexthops(struct nlmsghdr *n, struct rtmsg *r, int argc, char **argv)
 			fprintf(stderr, "Error: unexpected end of line after \"nexthop\"\n");
 			exit(-1);
 		}
-		memset(rtnh, 0, sizeof(*rtnh));
-		rtnh->rtnh_len = sizeof(*rtnh);
-		rta->rta_len += rtnh->rtnh_len;
-		parse_one_nh(rta, rtnh, &argc, &argv);
-		rtnh = RTNH_NEXT(rtnh);
+		parse_one_nh(n, maxlen, &argc, &argv);
 	}
+	addattr_nest_end(n, rta);
 
-	if (rta->rta_len > RTA_LENGTH(0))
-		addattr_l(n, 1024, RTA_MULTIPATH, RTA_DATA(rta), RTA_PAYLOAD(rta));
 	return 0;
 }
 
@@ -1062,7 +1072,7 @@ int iproute_modify(int cmd, unsigned flags, int argc, char **argv)
 	}
 
 	if (nhs_ok)
-		parse_nexthops(&req.n, &req.r, argc, argv);
+		parse_nexthops(&req.n, sizeof(req), argc, argv);
 
 	if (!table_ok) {
 		if (req.r.rtm_type == RTN_LOCAL ||
