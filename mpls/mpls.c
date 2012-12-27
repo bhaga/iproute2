@@ -36,13 +36,13 @@
 #define AF_MPLS		28	/* MPLS sockets         */
 #include "SNAPSHOT.h"
 #include "utils.h"
+#include "rt_names.h"
 #include "mpls.h"
 struct rtnl_handle rth = { .fd = -1 }; /*for getting interface names*/
 
 int resolve_hosts = 0;
 
 static int print_stats(void);
-static const char *lookup_proto(int key);
 static int mpls_list(int cmd);
 static int print_mpls(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg);
 
@@ -63,19 +63,6 @@ static void usage(void)
 	fprintf(stdout, "       TC_INDEX:= 0 .. 65535\n");
 	fprintf(stdout, "\n");
 	exit(-1);
-}
-
-/* Protocol lookup function. */
-static const char *
-lookup_proto(int key)
-{
-  const struct message *pnt;
-
-  for (pnt = rtproto_str; pnt->key != 0; pnt++)
-    if (pnt->key == key)
-      return pnt->str;
-
-  return "";
 }
 
 //prints stats from /proc/net/mpls_stats
@@ -161,6 +148,8 @@ mpls_ilm_modify(int cmd, unsigned flags, int argc, char **argv)
 static int
 print_ilm(int cmd, const struct ilmsg *ilm_msg, void *arg, struct rtattr **tb)
 {
+	SPRINT_BUF(buf);
+
 	FILE *fp = (FILE*)arg;
 
 	if (cmd == RTM_DELROUTE)
@@ -170,7 +159,8 @@ print_ilm(int cmd, const struct ilmsg *ilm_msg, void *arg, struct rtattr **tb)
 		fprintf(fp, "ILM entry ");
 
 	print_label(fp, &ilm_msg->key, ilm_msg->tc);
-	fprintf (fp,"proto %s \n\t", lookup_proto(ilm_msg->owner));
+
+	fprintf(fp, "proto %s \n\t", rtnl_rtprot_n2a(ilm_msg->owner, buf, sizeof(buf)));
 	print_instructions(fp, tb);
 
 	fprintf(fp, "\n");
