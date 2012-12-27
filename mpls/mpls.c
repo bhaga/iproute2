@@ -135,7 +135,7 @@ mpls_ilm_modify(int cmd, unsigned flags, int argc, char **argv)
 
 	if (NEXT_ARG_OK()) {
 		NEXT_ARG();
-		if (parse_instr(NULL, &req.n, sizeof(req), &argc, &argv))
+		if (parse_instr(&req.n, sizeof(req), &argc, &argv))
 			invarg(*argv, "invalid nexthop type");
 	}
 

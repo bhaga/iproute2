@@ -711,7 +711,7 @@ int parse_one_nh(struct nlmsghdr *n, int maxlen, int *argcp, char ***argvp)
 			}
 
 			mpls_info = addattr_nest(n, maxlen, RTA_MPLS);
-			parse_instr(NULL, n, maxlen, &argc, &argv);
+			parse_instr(n, maxlen, &argc, &argv);
 			addattr_nest_end(n, mpls_info);
 		} else if (strcmp(*argv, "weight") == 0) {
 			unsigned w;
@@ -1009,7 +1009,7 @@ int iproute_modify(int cmd, unsigned flags, int argc, char **argv)
 			NEXT_ARG();
 
 			mpls_info = addattr_nest(&req.n, sizeof(req), RTA_MPLS);
-			parse_instr(NULL, &req.n, sizeof(req), &argc, &argv);
+			parse_instr(&req.n, sizeof(req), &argc, &argv);
 			addattr_nest_end(&req.n, mpls_info);
 
 		} else if (strcmp(*argv, "dev") == 0 ||
