@@ -75,7 +75,7 @@ static void usage(void)
 	fprintf(stderr, "             [ scope SCOPE ] [ metric METRIC ]\n");
 	fprintf(stderr, "INFO_SPEC := NH OPTIONS FLAGS [ nexthop NH ]...\n");
 	fprintf(stderr, "NH := [ via ADDRESS ] [ dev STRING ] [ weight NUMBER ] \n");
-	fprintf(stderr, "      [ mpls M_INSTRUCTIONS ] NHFLAGS\n");
+	fprintf(stderr, "      [ mpls MPLS ] NHFLAGS\n");
 	fprintf(stderr, "OPTIONS := FLAGS [ mtu NUMBER ] [ advmss NUMBER ]\n");
 	fprintf(stderr, "           [ rtt TIME ] [ rttvar TIME ] [reordering NUMBER ]\n");
 	fprintf(stderr, "           [ window NUMBER] [ cwnd NUMBER ] [ initcwnd NUMBER ]\n");
@@ -89,6 +89,13 @@ static void usage(void)
 	fprintf(stderr, "NHFLAGS := [ onlink | pervasive ]\n");
 	fprintf(stderr, "RTPROTO := [ kernel | boot | static | NUMBER ]\n");
 	fprintf(stderr, "TIME := NUMBER[s|ms]\n");
+	fprintf(stderr, "MPLS := [ dscp DSCP ] [ tc_index TC_INDEX ]\n");
+	fprintf(stderr, "        [ push [ tc TC ] LABEL_o [... [ tc TC ] LABEL_o ] ]\n");
+	fprintf(stderr, "        { [ dev NAME ] { IP_ADDRESS | IPv6_ADDRESS } }} \n");
+	fprintf(stderr, "LABEL_o := 0 .. 1048575\n");
+	fprintf(stderr, "TC      := 0 .. 7\n");
+	fprintf(stderr, "DSCP    := 0 .. 63\n");
+	fprintf(stderr, "TC_INDEX:= 0 .. 65535\n");
 	exit(-1);
 }
 
