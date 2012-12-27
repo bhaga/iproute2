@@ -59,8 +59,6 @@ extern struct rtattr *addattr_nest_compat(struct nlmsghdr *n, int maxlen, int ty
 extern int addattr_nest_compat_end(struct nlmsghdr *n, struct rtattr *nest);
 extern int rta_addattr32(struct rtattr *rta, int maxlen, int type, __u32 data);
 extern int rta_addattr_l(struct rtattr *rta, int maxlen, int type, const void *data, int alen);
-extern struct rtattr *rta_addattr_nest(struct rtattr *rta, int maxlen, int type);
-extern int rta_addattr_nest_end(struct rtattr *rta, struct rtattr *nest);
 
 extern int parse_rtattr(struct rtattr *tb[], int max, struct rtattr *rta, int len);
 extern int parse_rtattr_byindex(struct rtattr *tb[], int max, struct rtattr *rta, int len);
@@ -80,9 +78,6 @@ extern int rtnl_from_file(FILE *, rtnl_filter_t handler,
 
 #define NLMSG_TAIL(nmsg) \
 	((struct rtattr *) (((void *) (nmsg)) + NLMSG_ALIGN((nmsg)->nlmsg_len)))
-
-#define RTATTR_TAIL(rta) \
-	((struct rtattr*)(((char*)(rta)) + RTA_ALIGN((rta)->rta_len)))
 
 #ifndef IFA_RTA
 #define IFA_RTA(r) \

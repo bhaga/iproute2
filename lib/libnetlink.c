@@ -622,7 +622,7 @@ int rta_addattr32(struct rtattr *rta, int maxlen, int type, __u32 data)
 		fprintf(stderr,"rta_addattr32: Error! max allowed bound %d exceeded\n",maxlen);
 		return -1;
 	}
-	subrta = RTATTR_TAIL(rta);
+	subrta = (struct rtattr*)(((char*)rta) + RTA_ALIGN(rta->rta_len));
 	subrta->rta_type = type;
 	subrta->rta_len = len;
 	memcpy(RTA_DATA(subrta), &data, 4);
@@ -640,26 +640,12 @@ int rta_addattr_l(struct rtattr *rta, int maxlen, int type,
 		fprintf(stderr,"rta_addattr_l: Error! max allowed bound %d exceeded\n",maxlen);
 		return -1;
 	}
-	subrta = RTATTR_TAIL(rta);
+	subrta = (struct rtattr*)(((char*)rta) + RTA_ALIGN(rta->rta_len));
 	subrta->rta_type = type;
 	subrta->rta_len = len;
 	memcpy(RTA_DATA(subrta), data, alen);
 	rta->rta_len = NLMSG_ALIGN(rta->rta_len) + RTA_ALIGN(len);
 	return 0;
-}
-
-struct rtattr *rta_addattr_nest(struct rtattr *rta, int maxlen, int type)
-{
-	struct rtattr *nest = RTATTR_TAIL(rta);
-
-	rta_addattr_l(rta, maxlen, type, NULL, 0);
-	return nest;
-}
-
-int rta_addattr_nest_end(struct rtattr *rta, struct rtattr *nest)
-{
-	nest->rta_len = (void *)RTATTR_TAIL(rta) - (void *)nest;
-	return rta->rta_len;
 }
 
 int parse_rtattr(struct rtattr *tb[], int max, struct rtattr *rta, int len)
