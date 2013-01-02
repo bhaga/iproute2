@@ -554,6 +554,8 @@ int print_addrinfo(const struct sockaddr_nl *who, struct nlmsghdr *n,
 		fprintf(fp, "    dnet ");
 	else if (ifa->ifa_family == AF_IPX)
 		fprintf(fp, "     ipx ");
+	else if (ifa->ifa_family == AF_MPLS)
+		fprintf(fp, "    mpls ");
 	else
 		fprintf(fp, "    family %d ", ifa->ifa_family);
 

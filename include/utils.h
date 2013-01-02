@@ -57,6 +57,10 @@ typedef struct
 #define AF_DECnet 12
 #endif
 
+#ifndef AF_MPLS
+#define AF_MPLS 28
+#endif
+
 struct dn_naddr
 {
         unsigned short          a_len;

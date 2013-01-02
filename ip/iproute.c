@@ -277,7 +277,7 @@ int calc_host_len(struct rtmsg *r)
 {
 	if (r->rtm_family == AF_INET6)
 		return 128;
-	else if (r->rtm_family == AF_INET)
+	else if (r->rtm_family == AF_INET || r->rtm_family == AF_MPLS)
 		return 32;
 	else if (r->rtm_family == AF_DECnet)
 		return 16;

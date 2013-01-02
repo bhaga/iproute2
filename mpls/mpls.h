@@ -6,32 +6,33 @@
 #include "utils.h"
 
 static int
-mpls_parse_label(struct mpls_key *label, char *err, int *pargc, char ***pargv)
+mpls_parse_label(struct mpls_hdr *hdr, char *err, int *pargc, char ***pargv)
 {
-	unsigned int l;
+	unsigned int label;
 	int fatal = 0;
 	int argc = *pargc;
 	char **argv = *pargv;
 
+	memset(hdr, 0, sizeof(hdr));
 	if (strcmp(*argv, "tc") == 0) {
 		__u32 tc;
 		fatal = 1;
 		NEXT_ARG();
 		if (get_unsigned(&tc, *argv, 0))
 			invarg(*argv, "invalid tc");
-		label->tc = tc;
+		hdr->tc = tc;
 		NEXT_ARG();
 	}
 
-	if (get_unsigned(&l, *argv, 0) || l > 1048575) {
+	if (get_unsigned(&label, *argv, 0) || label > 1048575) {
 		if (fatal)
 			invarg(*argv, "invalid label");
 		char *msg = "invalid label value";
 		memcpy(err, msg, 20);
 		return (-1);
 	}
+	mpls_hdr_set_label(hdr, label);
 
-	label->label = l;
 	*pargc = argc;
 	*pargv = argv;
 	return 0;
@@ -53,17 +54,17 @@ parse_instr(struct nlmsghdr *nlh, size_t req_size, int *pargc, char ***pargv)
 
 	while (argc > 0) {
 		if (strcmp(*argv, "swap") == 0) {
-			struct mpls_key swap = { .label = 0, };
+			struct mpls_hdr swap;
 			char err[20];
 			NEXT_ARG();
 			if (mpls_parse_label(&swap, err, &argc, &argv))
 				invarg(*argv, err);
 
-			addattr_l(nlh, req_size, MPLS_ATTR_SWAP, &swap, sizeof(struct mpls_key));
+			addattr_l(nlh, req_size, MPLS_ATTR_SWAP, &swap, sizeof(swap));
 		} else if (strcmp(*argv, "push") == 0) {
 			char err[20];
 			struct rtattr *push_info;
-			struct mpls_key push = { .label = 0, };
+			struct mpls_hdr push;
 			if (no_push) {
 				duparg("push", *argv);
 				exit(-1);
@@ -71,8 +72,8 @@ parse_instr(struct nlmsghdr *nlh, size_t req_size, int *pargc, char ***pargv)
 			NEXT_ARG();
 
 			push_info = addattr_nest(nlh, req_size, MPLS_ATTR_PUSH);
-			while(!mpls_parse_label(&push, err, &argc, &argv)) {
-				addattr_l(nlh, req_size, MPLS_PUSH_1 + no_push, &push, sizeof(struct mpls_key));
+			while (!mpls_parse_label(&push, err, &argc, &argv)) {
+				addattr_l(nlh, req_size, MPLS_PUSH_1 + no_push, &push, sizeof(push));
 				if (++no_push > MPLS_PUSH_MAX - 1)
 					invarg(*argv, "invalid number of pushes");
 				NEXT_ARG();
@@ -189,14 +190,6 @@ print_address(FILE *fp, struct sockaddr *addr)
 	}
 }
 
-static inline void
-print_label(FILE *fp, const struct mpls_key *label, __u8 tc)
-{
-	fprintf(fp, "label %u ", label->label);
-	if (tc)
-		fprintf(fp, "tc %u ", tc);
-}
-
 static void
 print_instructions(FILE *fp, struct rtattr **tb)
 {
@@ -216,7 +209,7 @@ print_instructions(FILE *fp, struct rtattr **tb)
 			{
 				struct rtattr *push_a[__MPLS_ATTR_PUSH_MAX];
 				__u8 no_push;
-				struct mpls_key *push;
+				struct mpls_hdr *push;
 				int j;
 				parse_rtattr(push_a, MPLS_ATTR_PUSH_MAX, RTA_DATA(tb[MPLS_ATTR_PUSH]),
 					    RTA_PAYLOAD(tb[MPLS_ATTR_PUSH]));
@@ -234,20 +227,20 @@ print_instructions(FILE *fp, struct rtattr **tb)
 						perror("Error talking to kernel");
 						exit(-1);
 					}
-					push = (struct mpls_key *)RTA_DATA(push_a[MPLS_PUSH_1 + j]);
+					push = (struct mpls_hdr *)RTA_DATA(push_a[MPLS_PUSH_1 + j]);
 					if (push->tc)
 						fprintf(fp, "tc %hhu ", push->tc);
-					fprintf(fp, "%u ", push->label);
+					fprintf(fp, "%u ", mpls_hdr_label(push));
 				}
 			}
 			break;
 		case MPLS_ATTR_SWAP:
 			{
-				struct mpls_key *swap = (struct mpls_key *)RTA_DATA(tb[MPLS_ATTR_SWAP]);
+				struct mpls_hdr *swap = (struct mpls_hdr *)RTA_DATA(tb[MPLS_ATTR_SWAP]);
 				fprintf(fp, "swap ");
 				if (swap->tc)
 					fprintf(fp, "tc %hhu ", swap->tc);
-				fprintf(fp, "%u ", swap->label);
+				fprintf(fp, "%u ", mpls_hdr_label(swap));
 			}
 			break;
 		case MPLS_ATTR_SEND_IPv4:

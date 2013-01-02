@@ -264,7 +264,7 @@ int get_addr_1(inet_prefix *addr, const char *name, int family)
 	if (strcmp(name, "default") == 0 ||
 	    strcmp(name, "all") == 0 ||
 	    strcmp(name, "any") == 0) {
-		if (family == AF_DECnet)
+		if (family == AF_DECnet || family == AF_MPLS)
 			return -1;
 		addr->family = family;
 		addr->bytelen = (family == AF_INET6 ? 16 : 4);
@@ -293,6 +293,13 @@ int get_addr_1(inet_prefix *addr, const char *name, int family)
 		addr->bitlen = -1;
 		return 0;
 	}
+	if (family == AF_MPLS) {
+		addr->family = AF_MPLS;
+		addr->data[0] = atoi(name);
+		addr->bytelen = 4;
+		addr->bitlen = -1;
+		return 0;
+	}
 
 	addr->family = AF_INET;
 	if (family != AF_UNSPEC && family != AF_INET)
@@ -317,7 +324,7 @@ int get_prefix_1(inet_prefix *dst, char *arg, int family)
 	if (strcmp(arg, "default") == 0 ||
 	    strcmp(arg, "any") == 0 ||
 	    strcmp(arg, "all") == 0) {
-		if (family == AF_DECnet)
+		if (family == AF_DECnet || family == AF_MPLS)
 			return -1;
 		dst->family = family;
 		dst->bytelen = 0;
@@ -326,6 +333,8 @@ int get_prefix_1(inet_prefix *dst, char *arg, int family)
 	}
 
 	slash = strchr(arg, '/');
+	if (slash && family == AF_MPLS)
+		return -1;
 	if (slash)
 		*slash = 0;
 
@@ -513,6 +522,9 @@ const char *rt_addr_n2a(int af, int len, const void *addr, char *buf, int buflen
 		memcpy(dna.a_addr, addr, 2);
 		return dnet_ntop(af, &dna, buf, buflen);
 	}
+	case AF_MPLS:
+		snprintf(buf, buflen, "%d", *(__u32*)addr);
+		return buf;
 	default:
 		return "???";
 	}

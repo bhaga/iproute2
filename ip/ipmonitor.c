@@ -168,6 +168,8 @@ int do_ipmonitor(int argc, char **argv)
 			groups |= nl_mgrp(RTNLGRP_IPV4_ROUTE);
 		if (!preferred_family || preferred_family == AF_INET6)
 			groups |= nl_mgrp(RTNLGRP_IPV6_ROUTE);
+		if (!preferred_family || preferred_family == AF_MPLS)
+			groups |= nl_mgrp(RTNLGRP_MPLS);
 	}
 	if (lprefix) {
 		if (!preferred_family || preferred_family == AF_INET6)

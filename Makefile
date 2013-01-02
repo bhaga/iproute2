@@ -40,7 +40,7 @@ endif
 CFLAGS = $(CCOPTS) -I../include $(DEFINES)
 YACCFLAGS = -d -t -v
 
-SUBDIRS=lib ip tc misc netem genl mpls
+SUBDIRS=lib ip tc misc netem genl
 
 LIBNETLINK=../lib/libnetlink.a ../lib/libutil.a
 LDLIBS += $(LIBNETLINK)
