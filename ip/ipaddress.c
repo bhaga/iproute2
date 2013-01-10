@@ -109,6 +109,7 @@ void print_link_flags(FILE *fp, unsigned flags, unsigned mdown)
 	_PF(LOWER_UP);
 	_PF(DORMANT);
 	_PF(ECHO);
+	_PF(MPLS);
 #undef _PF
         if (flags)
 		fprintf(fp, "%x", flags);

@@ -356,6 +356,15 @@ int iplink_parse(int argc, char **argv, struct iplink_req *req,
 				req->i.ifi_flags |= IFF_NOARP;
 			} else
 				return on_off("noarp");
+		} else if (strcmp(*argv, "mpls") == 0) {
+			NEXT_ARG();
+			req->i.ifi_change |= IFF_MPLS;
+			if (strcmp(*argv, "on") == 0) {
+				req->i.ifi_flags |= IFF_MPLS;
+			} else if (strcmp(*argv, "off") == 0) {
+				req->i.ifi_flags &= ~IFF_MPLS;
+			} else
+				return on_off("nompls");
 		} else if (strcmp(*argv, "vf") == 0) {
 			struct rtattr *vflist;
 			NEXT_ARG();
@@ -829,6 +838,15 @@ static int do_set(int argc, char **argv)
 				flags |= IFF_NOARP;
 			} else
 				return on_off("noarp");
+		} else if (strcmp(*argv, "mpls") == 0) {
+			NEXT_ARG();
+			mask |= IFF_MPLS;
+			if (strcmp(*argv, "on") == 0) {
+				flags |= IFF_MPLS;
+			} else if (strcmp(*argv, "off") == 0) {
+				flags &= ~IFF_MPLS;
+			} else
+				return on_off("nompls");
 		} else if (matches(*argv, "dynamic") == 0) {
 			NEXT_ARG();
 			mask |= IFF_DYNAMIC;

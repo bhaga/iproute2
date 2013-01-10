@@ -53,8 +53,10 @@
 
 #define IFF_ECHO	0x40000		/* echo sent packets		*/
 
+#define IFF_MPLS	0x80000		/* MPLS forwarding enabled */
+
 #define IFF_VOLATILE	(IFF_LOOPBACK|IFF_POINTOPOINT|IFF_BROADCAST|IFF_ECHO|\
-		IFF_MASTER|IFF_SLAVE|IFF_RUNNING|IFF_LOWER_UP|IFF_DORMANT)
+		IFF_MASTER|IFF_SLAVE|IFF_RUNNING|IFF_LOWER_UP|IFF_DORMANT|IFF_MPLS)
 
 /* Private (from user) interface flags (netdevice->priv_flags). */
 #define IFF_802_1Q_VLAN 0x1             /* 802.1Q VLAN device.          */
@@ -124,7 +126,7 @@ enum {
 };
 
 /*
- *	Device mapping structure. I'd just gone off and designed a 
+ *	Device mapping structure. I'd just gone off and designed a
  *	beautiful scheme using only loadable modules with arguments
  *	for driver options and along come the PCMCIA people 8)
  *
@@ -136,7 +138,7 @@ enum {
 struct ifmap {
 	unsigned long mem_start;
 	unsigned long mem_end;
-	unsigned short base_addr; 
+	unsigned short base_addr;
 	unsigned char irq;
 	unsigned char dma;
 	unsigned char port;
@@ -173,7 +175,7 @@ struct ifreq {
 	{
 		char	ifrn_name[IFNAMSIZ];		/* if name, e.g. "en0" */
 	} ifr_ifrn;
-	
+
 	union {
 		struct	sockaddr ifru_addr;
 		struct	sockaddr ifru_dstaddr;
