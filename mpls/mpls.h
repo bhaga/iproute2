@@ -47,7 +47,7 @@ parse_instr(struct nlmsghdr *nlh, size_t req_size, int *pargc, char ***pargv)
 	__u32 dscp;
 	__u32 tc_index;
 	__u32 ifindex;
-	int nh_is_set = 0, num_push = 0, ret = 0;
+	int nh_is_set = 0, num_push = 0, ret = 0, netns = -1;
 
 	while (argc > 0) {
 		if (strcmp(*argv, "swap") == 0) {
@@ -86,7 +86,20 @@ parse_instr(struct nlmsghdr *nlh, size_t req_size, int *pargc, char ***pargv)
 				invarg(*argv, "invalid number of pops");
 
 			addattr_l(nlh, req_size, MPLSA_POP, &pop, sizeof(__u8));
-		}  else if (strcmp(*argv, "dscp") == 0) {
+		} else if (strcmp(*argv, "netns") == 0) {
+			NEXT_ARG();
+			if (netns != -1)
+				duparg("netns", *argv);
+			if ((netns = get_netns_fd(*argv)) >= 0) {
+				char netns_name[MPLS_NETNS_NAME_MAX];
+				strncpy(netns_name, *argv, MPLS_NETNS_NAME_MAX);
+				addattr_l(nlh, req_size, MPLSA_NETNS_NAME, netns_name, MPLS_NETNS_NAME_MAX);
+				addattr_l(nlh, req_size, MPLSA_NETNS_FD, &netns, 4);
+			} else if (get_integer(&netns, *argv, 0) == 0)
+				addattr_l(nlh, req_size, MPLSA_NETNS_PID, &netns, 4);
+			else
+				invarg("Invalid \"netns\" value\n", *argv);
+		} else if (strcmp(*argv, "dscp") == 0) {
 			NEXT_ARG();
 			if (get_unsigned(&dscp, *argv, 0))
 				invarg(*argv, "invalid DSCP");
@@ -101,9 +114,19 @@ parse_instr(struct nlmsghdr *nlh, size_t req_size, int *pargc, char ***pargv)
 		} else if (strcmp(*argv, "dev") == 0) {
 			NEXT_ARG();
 			ifindex = ll_name_to_index(*argv);
-			if (!ifindex)
-				invarg(*argv, "invalid interface name");
-			addattr_l(nlh, req_size, MPLSA_NEXTHOP_OIF, &ifindex, sizeof(ifindex));
+			if (!ifindex) {
+				int len = strlen(*argv) + 1;
+				if (len == 1)
+					invarg("\"\" is not a valid device identifier\n", "dev");
+				if (len > IFNAMSIZ)
+					invarg("\"dev\" too long\n", *argv);
+				addattr_l(nlh, req_size, MPLSA_NEXTHOP_IFNAME, *argv, len);
+			} else
+				addattr_l(nlh, req_size, MPLSA_NEXTHOP_OIF, &ifindex, sizeof(ifindex));
+		} else if (strcmp(*argv, "global") == 0 ||
+					strcmp(*argv, "g") == 0) {
+			addattr_l(nlh, req_size, MPLSA_NEXTHOP_GLOBAL, &ifindex, 0);
+			NEXT_ARG();
 		} else {
 			inet_prefix addr;
 
@@ -156,7 +179,7 @@ exit:
 }
 
 static void
-print_address(FILE *fp, struct sockaddr *addr)
+print_address(FILE *fp, const struct sockaddr *addr)
 {
 	char buf[256];
 	switch (addr->sa_family) {
@@ -179,7 +202,7 @@ print_address(FILE *fp, struct sockaddr *addr)
 		break;
 	}
 	default:
-		fprintf(fp, "<unknown address family %d> ", addr->sa_family);
+		fprintf(fp, "<unknown address family %d> ", addr->family);
 	}
 }
 
@@ -205,6 +228,14 @@ print_instructions(FILE *fp, struct rtattr **tb)
 				fprintf(fp, "%u ", mpls_hdr_label(mhdr));
 			}
 			break;
+		case MPLSA_NETNS_FD:
+			break;
+		case MPLSA_NETNS_NAME:
+			fprintf(fp, "netns %d ", (char*)RTA_DATA(tb[i]));
+			break;
+		case MPLSA_NETNS_PID:
+			fprintf(fp, "netns %d ", *(__u32*)RTA_DATA(tb[i]));
+			break;
 		case MPLSA_SWAP:
 			mhdr = (struct mpls_hdr *)RTA_DATA(tb[i]);
 			fprintf(fp, "swap ");
@@ -217,6 +248,12 @@ print_instructions(FILE *fp, struct rtattr **tb)
 			break;
 		case MPLSA_DSCP:
 			fprintf(fp, "dscp %hu ", *(__u8*)RTA_DATA(tb[i]));
+			break;
+		case MPLSA_NEXTHOP_GLOBAL:
+			fprintf(fp, "global ");
+			break;
+		case MPLSA_NEXTHOP_IFNAME:
+			fprintf(fp, "dev %s ", (char *)RTA_DATA(tb[i]));
 			break;
 		case MPLSA_NEXTHOP_OIF:
 			fprintf(fp, "dev %s ", ll_index_to_name(*(__u32*)RTA_DATA(tb[i])));
