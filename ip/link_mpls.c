@@ -21,7 +21,7 @@
 #include "rt_names.h"
 #include "utils.h"
 #include "ip_common.h"
-#include "../mpls/mpls.h"
+#include "mpls.h"
 
 static void usage(void) __attribute__((noreturn));
 static void usage(void)

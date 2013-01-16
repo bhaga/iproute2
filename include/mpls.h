@@ -93,8 +93,8 @@ parse_instr(struct nlmsghdr *nlh, size_t req_size, int *pargc, char ***pargv)
 			if ((netns = get_netns_fd(*argv)) >= 0) {
 				char netns_name[MPLS_NETNS_NAME_MAX];
 				strncpy(netns_name, *argv, MPLS_NETNS_NAME_MAX);
-				addattr_l(nlh, req_size, MPLSA_NETNS_NAME, netns_name, MPLS_NETNS_NAME_MAX);
 				addattr_l(nlh, req_size, MPLSA_NETNS_FD, &netns, 4);
+				addattr_l(nlh, req_size, MPLSA_NETNS_NAME, netns_name, MPLS_NETNS_NAME_MAX);
 			} else if (get_integer(&netns, *argv, 0) == 0)
 				addattr_l(nlh, req_size, MPLSA_NETNS_PID, &netns, 4);
 			else
@@ -125,8 +125,7 @@ parse_instr(struct nlmsghdr *nlh, size_t req_size, int *pargc, char ***pargv)
 				addattr_l(nlh, req_size, MPLSA_NEXTHOP_OIF, &ifindex, sizeof(ifindex));
 		} else if (strcmp(*argv, "global") == 0 ||
 					strcmp(*argv, "g") == 0) {
-			addattr_l(nlh, req_size, MPLSA_NEXTHOP_GLOBAL, &ifindex, 0);
-			NEXT_ARG();
+			addattr_l(nlh, req_size, MPLSA_NEXTHOP_GLOBAL, NULL, 0);
 		} else {
 			inet_prefix addr;
 
@@ -202,7 +201,7 @@ print_address(FILE *fp, const struct sockaddr *addr)
 		break;
 	}
 	default:
-		fprintf(fp, "<unknown address family %d> ", addr->family);
+		fprintf(fp, "<unknown address family %d> ", addr->sa_family);
 	}
 }
 
@@ -222,7 +221,7 @@ print_instructions(FILE *fp, struct rtattr **tb)
 		case MPLSA_PUSH:
 			fprintf(fp, "push ");
 			mhdr = (struct mpls_hdr *)RTA_DATA(tb[i]);
-			for (j = 0; j < RTA_PAYLOAD(tb[i]) / sizeof(MPLS_HDR_LEN); j++, mhdr++) {
+			for (j = 0; j < RTA_PAYLOAD(tb[i]) / MPLS_HDR_LEN; j++, mhdr++) {
 				if (mhdr->tc)
 					fprintf(fp, "tc %hhu ", mhdr->tc);
 				fprintf(fp, "%u ", mpls_hdr_label(mhdr));
@@ -231,7 +230,7 @@ print_instructions(FILE *fp, struct rtattr **tb)
 		case MPLSA_NETNS_FD:
 			break;
 		case MPLSA_NETNS_NAME:
-			fprintf(fp, "netns %d ", (char*)RTA_DATA(tb[i]));
+			fprintf(fp, "netns %s ", (char*)RTA_DATA(tb[i]));
 			break;
 		case MPLSA_NETNS_PID:
 			fprintf(fp, "netns %d ", *(__u32*)RTA_DATA(tb[i]));

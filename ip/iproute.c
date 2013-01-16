@@ -29,7 +29,7 @@
 #include "rt_names.h"
 #include "utils.h"
 #include "ip_common.h"
-#include "../mpls/mpls.h"
+#include "mpls.h"
 
 #ifndef RTAX_RTTVAR
 #define RTAX_RTTVAR RTAX_HOPS
