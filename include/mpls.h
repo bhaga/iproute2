@@ -82,9 +82,12 @@ parse_instr(struct nlmsghdr *nlh, size_t req_size, int *pargc, char ***pargv)
 				invarg(*argv, "invalid number of pushes");
 		} else if (strcmp(*argv, "pop") == 0) {
 			NEXT_ARG();
-			if (get_unsigned(&pop, *argv, 0))
-				invarg(*argv, "invalid number of pops");
-
+			if (get_unsigned(&pop, *argv, 0)) {
+				if ((strcmp(*argv, "all") != 0))
+					invarg(*argv, "invalid number of pops");
+				else
+					pop = POP_ALL;
+			}
 			addattr_l(nlh, req_size, MPLSA_POP, &pop, sizeof(__u8));
 		} else if (strcmp(*argv, "netns") == 0) {
 			NEXT_ARG();
@@ -216,7 +219,10 @@ print_instructions(FILE *fp, struct rtattr **tb)
 			continue;
 		switch (i) {
 		case MPLSA_POP:
-			fprintf(fp, "pop %u ", *(__u8*)RTA_DATA(tb[i]));
+			if (*(__u8*)RTA_DATA(tb[i]) == POP_ALL) {
+				fprintf(fp, "pop all ");
+			} else
+				fprintf(fp, "pop %u ", *(__u8*)RTA_DATA(tb[i]));
 			break;
 		case MPLSA_PUSH:
 			fprintf(fp, "push ");
