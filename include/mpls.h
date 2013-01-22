@@ -153,8 +153,8 @@ parse_instr(struct nlmsghdr *nlh, size_t req_size, int *pargc, char ***pargv)
 				}
 				case AF_INET6: {
 					struct sockaddr_in6 sin6;
-					sin6.sin6_family = AF_INET6;
 					memset(&sin6, 0, sizeof(sin6));
+					sin6.sin6_family = AF_INET6;
 					memcpy(&sin6.sin6_addr, addr.data, addr.bytelen);
 					addattr_l(nlh, req_size, MPLSA_NEXTHOP_ADDR,
 						  &sin6, sizeof(sin6));
