@@ -15,8 +15,6 @@
 
 #define MPLS_MASTER_DEV "mpls0"
 
-#define MPLS_NETNS_NAME_MAX 16
-
 #define TC_MAX ((1 << 3) - 1)
 #define DSCP_MAX ((1 << 8) - 1)
 #define POP_ALL ((1 << 8) - 1)
@@ -28,11 +26,6 @@ enum mplsattr_type_t {
 	MPLSA_TC_INDEX,
 	MPLSA_SWAP,
 	MPLSA_PUSH,
-	MPLSA_NETNS_FD,
-	MPLSA_NETNS_PID,
-	MPLSA_NETNS_NAME,
-	MPLSA_NEXTHOP_GLOBAL,
-	MPLSA_NEXTHOP_IFNAME,
 	MPLSA_NEXTHOP_OIF,
 	MPLSA_NEXTHOP_ADDR,
 	__MPLS_ATTR_MAX,
@@ -42,13 +35,13 @@ enum mplsattr_type_t {
 struct mpls_hdr {
 	__be16	label_msb;
 #if defined(__LITTLE_ENDIAN_BITFIELD)
-	__u8	s:1;
-	__u8	tc:3;
-	__u8	label_lsb:4;
+	__u32	s:1;
+	__u32	tc:3;
+	__u32	label_lsb:4;
 #elif defined (__BIG_ENDIAN_BITFIELD)
-	__u8	label_lsb:4;
-	__u8	tc:3;
-	__u8	s:1;
+	__u32	label_lsb:4;
+	__u32	tc:3;
+	__u32	s:1;
 #else
 #error	"Please fix <asm/byteorder.h>"
 #endif
